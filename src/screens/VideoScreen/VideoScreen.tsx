@@ -12,7 +12,7 @@ import VideoSeek from './VideoSeek'
 import './VideoScreen.css'
 
 export default function VideoScreen() {
-  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, storageError } = useVideoSession()
+  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, storageError, saving, retrySave } = useVideoSession()
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
@@ -26,7 +26,7 @@ export default function VideoScreen() {
   const [controlsVisible, setControlsVisible] = useState(true)
   const [activity, setActivity] = useState(0)
   const [scrubbing, setScrubbing] = useState(false)
-  const audioGraph = useRef<{ context: AudioContext; gain: GainNode } | null>(null)
+  const audioGraph = useRef<{ context: AudioContext; gain: GainNode; video: HTMLVideoElement } | null>(null)
   const lastVolume = useRef(1)
   const [controlsFocused, setControlsFocused] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -40,6 +40,19 @@ export default function VideoScreen() {
   const file = entries[activeIndex]?.file
   const supportsVolume = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
   const wake = () => { setControlsVisible(true); setActivity((n) => n + 1) }
+
+  const silenceGraph = () => {
+    const graph = audioGraph.current
+    if (!graph) return
+    graph.gain.gain.value = 0
+    void graph.context.suspend().catch(() => {})
+  }
+  const resumeGraph = () => {
+    const graph = audioGraph.current
+    if (!graph) return
+    graph.gain.gain.value = muted ? 0 : volume
+    void graph.context.resume().catch(() => setError('Audio could not resume. Press Play again.'))
+  }
 
   useEffect(() => { pauseAudio(); return () => { if (audioGraph.current) { void audioGraph.current.context.close(); audioGraph.current = null } } }, [pauseAudio])
   useEffect(() => {
@@ -69,6 +82,7 @@ export default function VideoScreen() {
     video.load()
     return () => {
       if (video.readyState >= 1 && activeId !== null) saveProgress(activeId, video.currentTime, video.ended)
+      silenceGraph()
       video.pause()
       video.removeAttribute('src')
       video.load()
@@ -84,21 +98,26 @@ export default function VideoScreen() {
     if (supportsVolume) video.volume = value
     else {
       try {
+        if (audioGraph.current && audioGraph.current.video !== video) {
+          void audioGraph.current.context.close().catch(() => {})
+          audioGraph.current = null
+        }
         if (!audioGraph.current) {
           const context = new AudioContext()
           const gain = context.createGain()
           context.createMediaElementSource(video).connect(gain).connect(context.destination)
-          audioGraph.current = { context, gain }
+          audioGraph.current = { context, gain, video }
         }
-        audioGraph.current.gain.gain.value = value
-        void audioGraph.current.context.resume().catch(() => setError('Volume control is unavailable. Use the device volume buttons.'))
+        audioGraph.current.gain.gain.value = video.paused ? 0 : value
+        if (video.paused) silenceGraph()
+        else void audioGraph.current.context.resume().catch(() => setError('Volume control is unavailable. Use the device volume buttons.'))
       } catch { setError('Volume control is unavailable. Use the device volume buttons.') }
     }
     wake()
   }
   const toggleMute = () => {
     if (muted || volume === 0) { changeVolume(volume || lastVolume.current); setMuted(false) }
-    else setMuted(true)
+    else { setMuted(true); if (audioGraph.current) audioGraph.current.gain.gain.value = 0 }
     wake()
   }
   const handoff = () => {
@@ -114,13 +133,12 @@ export default function VideoScreen() {
   const play = () => {
     const video = videoRef.current
     if (!video) return
-    if (audioGraph.current) void audioGraph.current.context.resume()
-    void video.play().catch(() => { setPlaying(false); setError('Playback could not start. Press Play, or try another video format.') })
+    void video.play().catch(() => { silenceGraph(); setPlaying(false); setError('Playback could not start. Press Play, or try another video format.') })
   }
   const togglePlay = () => {
     wake()
     if (videoRef.current?.paused) play()
-    else videoRef.current?.pause()
+    else { silenceGraph(); videoRef.current?.pause() }
   }
   const seek = (target: number) => {
     if (!videoRef.current || !Number.isFinite(target) || duration <= 0) return
@@ -210,8 +228,9 @@ export default function VideoScreen() {
               }}
               onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
               onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
-              onPlay={() => { handoff(); setPlaying(true); setError(null) }} onPause={() => setPlaying(false)}
+              onPlay={() => { handoff(); resumeGraph(); setPlaying(true); setError(null) }} onPause={() => { silenceGraph(); setPlaying(false) }}
               onEnded={() => {
+                silenceGraph()
                 setPlaying(false)
                 if (activeId !== null) saveProgress(activeId, duration, true)
                 if (repeat === 'one') { seek(0); play() }
@@ -219,7 +238,7 @@ export default function VideoScreen() {
                 else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
               }}
               onClick={() => { if (controlsVisible) togglePlay(); else wake() }}
-              onError={() => { setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
+              onError={() => { silenceGraph(); setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
             <div className={`video-overlay${controlsVisible ? '' : ' video-overlay--hidden'}`}
               onFocusCapture={(event) => { wake(); if (event.target.matches(':focus-visible')) setControlsFocused(true) }} onBlurCapture={() => setControlsFocused(false)}>
               <div className="video-top-controls">
@@ -253,9 +272,10 @@ export default function VideoScreen() {
           <button className="btn" onClick={() => inputRef.current?.click()}><PlusIcon /> Add videos</button>
           <ol>{entries.map((entry, i) => <li key={entry.id} className={`${entry.id === activeId ? 'is-active' : ''}${progress[entry.id]?.completed ? ' is-watched' : ''}`}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}{progress[entry.id]?.completed && <small className="video-watched-label">✓ Watched</small>}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
         </aside>}
-        {(error || storageError) && <p className="video-error" role="alert">{error || storageError}</p>}
+        {error && <p className="video-error" role="alert">{error}</p>}
       </div>
       {file && <div className="video-details"><div><h2>{file.name}</h2><p>{activeIndex + 1} of {entries.length} · {(file.size / 1024 / 1024).toFixed(1)} MB</p></div><button className="btn" onClick={() => { setQueueOpen(!queueOpen); wake() }}>Show playlist</button></div>}
+      {storageError && <div className="video-storage-error" role="alert"><p>{storageError}</p><button className="btn" disabled={saving} onClick={() => void retrySave()}>{saving ? 'Saving…' : 'Retry saving'}</button></div>}
       <p className="video-note">Videos are saved on this device for next time. Your playlist, watched videos and playback positions are remembered. Clearing browser data removes saved videos. During playback, controls hide automatically; move the pointer or tap the video to show them.</p>
     </main>
   )

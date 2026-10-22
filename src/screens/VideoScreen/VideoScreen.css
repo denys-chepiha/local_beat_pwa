@@ -98,3 +98,6 @@
 .video-watched-label { display: block; color: #86dfb0; font-size: 12px; margin-top: 4px; }
 .video-queue .is-watched { border-left: 3px solid #86dfb0; }
 @media (max-width: 600px) { .video-right-controls { justify-content: flex-end; flex-basis: 100%; } }
+
+.video-storage-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 16px; border: 1px solid #8b7136; border-radius: 8px; color: #ffe2a0; background: #342c1d; font-size: 14px; line-height: 1.5; }
+.video-storage-error p { flex: 1; min-width: min(240px, 100%); }

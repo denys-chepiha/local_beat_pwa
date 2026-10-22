@@ -157,3 +157,37 @@ it('shows preview only after holding for one second and commits on release', () 
   expect(video.currentTime).toBe(65)
   expect(screen.queryByLabelText('Video preview')).toBeNull()
 })
+
+it('silences and suspends iOS Web Audio on pause without resuming when volume changes', () => {
+  vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('iPhone')
+  const gain = { gain: { value: 1 }, connect: vi.fn() }
+  const suspend = vi.fn(async () => {})
+  const resume = vi.fn(async () => {})
+  vi.stubGlobal('AudioContext', class {
+    destination = {}
+    createGain = () => gain
+    createMediaElementSource = () => ({ connect: () => gain })
+    suspend = suspend
+    resume = resume
+    close = vi.fn(async () => {})
+  })
+  try {
+    const { container } = render(<VideoScreen />)
+    choose('pause.mp4')
+    metadata(container.querySelector('video')!)
+    fireEvent.change(screen.getByLabelText('Video volume'), { target: { value: 0.4 } })
+    expect(gain.gain.value).toBe(0)
+    expect(resume).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+    expect(gain.gain.value).toBe(0.4)
+    expect(resume).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause video' }))
+    expect(gain.gain.value).toBe(0)
+    expect(suspend).toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Video volume'), { target: { value: 0.6 } })
+    expect(gain.gain.value).toBe(0)
+    expect(resume).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+    expect(gain.gain.value).toBe(0.6)
+  } finally { cleanup(); vi.unstubAllGlobals() }
+})
