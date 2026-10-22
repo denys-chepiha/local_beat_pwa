@@ -39,14 +39,14 @@ if (typeof HTMLMediaElement !== 'undefined') {
   Object.defineProperty(HTMLMediaElement.prototype, 'load', {
     configurable: true,
     value(this: HTMLMediaElement) {
+      this.currentTime = 0
       readyStateMap.set(this, 1)
     },
   })
 }
 
-if (typeof URL.createObjectURL === 'undefined') {
-  URL.createObjectURL = () => 'blob:mock-url'
-}
-if (typeof URL.revokeObjectURL === 'undefined') {
-  URL.revokeObjectURL = () => {}
-}
+// Vitest 4 exposes Node's blob URL API, which cannot consume jsdom File
+// objects cloned by fake-indexeddb. No real decoder uses these URLs in jsdom.
+let objectUrlId = 0
+URL.createObjectURL = () => `blob:mock-${++objectUrlId}`
+URL.revokeObjectURL = () => {}

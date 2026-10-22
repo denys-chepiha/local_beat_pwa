@@ -4,7 +4,6 @@ import { useState } from 'react'
 import AudiobookCard from '@/components/AudiobookCard'
 import AudiobookActionMenu from '@/components/AudiobookActionMenu'
 import AudiobookImportWizard from '@/components/AudiobookImportWizard'
-import SectionSwitcher from '@/components/SectionSwitcher'
 import { PlusIcon, SettingsIcon, BookIcon } from '@/components/Icons'
 // Hooks
 import { useAudiobookActions } from '@/hooks/useAudiobookActions'
@@ -50,7 +49,6 @@ export default function AudiobookLibraryScreen() {
         </button>
       </header>
 
-      <SectionSwitcher />
 
       {books.length === 0 ? (
         <div className="empty">

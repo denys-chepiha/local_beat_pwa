@@ -261,3 +261,101 @@ describe('usePlayerStore — music playback (post audiobook refactor)', () => {
     expect(s.nowPlaying?.kind).toBe('audiobook')
   })
 })
+
+
+describe('playback race regressions', () => {
+  it('keeps the last requested track when older storage reads finish late', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 3)
+    const first = await useLibraryStore.getState().getBlob(tracks[0].id)
+    let finish!: (value: typeof first) => void
+    vi.spyOn(useLibraryStore.getState(), 'getBlob').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const older = usePlayerStore.getState().playPlaylist(playlist.id, tracks[0].id)
+    await usePlayerStore.getState().playPlaylist(playlist.id, tracks[2].id)
+    finish(first)
+    await older
+    expect(usePlayerStore.getState().currentTrackId).toBe(tracks[2].id)
+    expect(usePlayerStore.getState().musicQueueIndex).toBe(2)
+  })
+
+  it('cancels pending audio when paused for video', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 1)
+    const blob = await useLibraryStore.getState().getBlob(tracks[0].id)
+    let finish!: (value: typeof blob) => void
+    vi.spyOn(useLibraryStore.getState(), 'getBlob').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().pause()
+    finish(blob)
+    await pending
+    expect(usePlayerStore.getState().isPlaying).toBe(false)
+  })
+
+  it('follows a reordered playlist without restarting the current song', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 3)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().seek(40)
+    await useLibraryStore.getState().reorderTracks(playlist.id, [tracks[2].id, tracks[0].id, tracks[1].id])
+    usePlayerStore.getState().syncMusicQueue()
+    expect(usePlayerStore.getState().currentTime).toBe(40)
+    expect(usePlayerStore.getState().musicQueueIndex).toBe(1)
+    await usePlayerStore.getState().next()
+    expect(usePlayerStore.getState().currentTrackId).toBe(tracks[1].id)
+  })
+
+  it('removes a deferred resume seek before another track loads', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist } = await seedPlaylist(useLibraryStore, 2)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().seek(90)
+    const audio = document.querySelector('audio')!
+    Object.defineProperty(audio, 'readyState', { configurable: true, value: 0 })
+    await usePlayerStore.getState().resume()
+    await usePlayerStore.getState().next()
+    Object.defineProperty(audio, 'readyState', { configurable: true, value: 1 })
+    audio.dispatchEvent(new Event('loadedmetadata'))
+    expect(audio.currentTime).toBe(0)
+    expect(usePlayerStore.getState().currentTime).toBe(0)
+  })
+
+  it('rejects non-finite seek and volume inputs', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist } = await seedPlaylist(useLibraryStore, 1)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().seek(NaN)
+    usePlayerStore.getState().setVolume(Infinity)
+    expect(usePlayerStore.getState().currentTime).toBe(0)
+    expect(usePlayerStore.getState().volume).toBe(1)
+  })
+})
+
+it('restores audio metadata after video and treats repeated system pause as pause', async () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'mediaSession')
+  const handlers = new Map<string, (() => void) | null>()
+  const mediaSession = { metadata: null as { title: string } | null, playbackState: 'none',
+    setActionHandler: (action: string, handler: (() => void) | null) => handlers.set(action, handler),
+    setPositionState: vi.fn(),
+  }
+  Object.defineProperty(navigator, 'mediaSession', { configurable: true, value: mediaSession })
+  vi.stubGlobal('MediaMetadata', class {
+    title: string
+    constructor(init: MediaMetadataInit) { this.title = init.title ?? '' }
+  })
+  try {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 1)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().pause()
+    mediaSession.metadata = null
+    await usePlayerStore.getState().togglePlay()
+    expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title })
+    handlers.get('pause')?.()
+    handlers.get('pause')?.()
+    expect(usePlayerStore.getState().isPlaying).toBe(false)
+  } finally {
+    if (original) Object.defineProperty(navigator, 'mediaSession', original)
+    else Reflect.deleteProperty(navigator, 'mediaSession')
+    vi.unstubAllGlobals()
+  }
+})

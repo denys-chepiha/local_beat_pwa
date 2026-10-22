@@ -189,7 +189,7 @@ export const useAudiobookStore = create<AudiobookStore>((set, get) => ({
       coverBlobId,
       coverThumbnailBlobId,
       status: canCarryProgress ? oldBook!.status : 'not_started',
-      currentChapterId: canCarryProgress ? oldBook!.currentChapterId : undefined,
+      currentChapterId: canCarryProgress ? chapterRecords[oldBook!.currentChapterIndex]?.id : undefined,
       currentChapterIndex: canCarryProgress ? oldBook!.currentChapterIndex : 0,
       currentTime: canCarryProgress ? oldBook!.currentTime : 0,
       totalDuration,
@@ -273,12 +273,14 @@ export const useAudiobookStore = create<AudiobookStore>((set, get) => ({
     if (patch.title != null) dbPatch.title = patch.title.trim()
     if (patch.author !== undefined) dbPatch.author = patch.author?.trim() || undefined
 
+    let newCoverBlobs: AudiobookBlob[] = []
+    let staleCoverIds: string[] = []
     if (patch.cover !== undefined) {
       const staleIds = [book.coverBlobId, book.coverThumbnailBlobId].filter(
         (id): id is string => !!id,
       )
+      staleCoverIds = staleIds
       if (patch.cover === null) {
-        if (staleIds.length) await db.audiobookBlobs.bulkDelete(staleIds)
         dbPatch.coverBlobId = undefined
         dbPatch.coverThumbnailBlobId = undefined
       } else {
@@ -292,14 +294,17 @@ export const useAudiobookStore = create<AudiobookStore>((set, get) => ({
         } catch {
           /* thumbnail optional */
         }
-        await db.audiobookBlobs.bulkAdd(newBlobs)
-        if (staleIds.length) await db.audiobookBlobs.bulkDelete(staleIds)
+        newCoverBlobs = newBlobs
         dbPatch.coverBlobId = coverBlobId
         dbPatch.coverThumbnailBlobId = coverThumbnailBlobId
       }
     }
 
-    await db.audiobooks.update(bookId, dbPatch)
+    await db.transaction('rw', db.audiobooks, db.audiobookBlobs, async () => {
+      if (newCoverBlobs.length) await db.audiobookBlobs.bulkAdd(newCoverBlobs)
+      await db.audiobooks.update(bookId, dbPatch)
+      if (staleCoverIds.length) await db.audiobookBlobs.bulkDelete(staleCoverIds)
+    })
     set((s) => ({
       books: s.books.map((b) => (b.id === bookId ? { ...b, ...dbPatch } : b)),
     }))

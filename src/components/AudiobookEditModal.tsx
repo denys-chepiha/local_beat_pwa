@@ -20,6 +20,7 @@ export default function AudiobookEditModal({ book, onClose }: Props) {
   const [author, setAuthor] = useState(book.author ?? '')
   const [newCover, setNewCover] = useState<File | null>(null)
   const [removeCover, setRemoveCover] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [newCoverUrl, setNewCoverUrl] = useState<string | null>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -40,13 +41,17 @@ export default function AudiobookEditModal({ book, onClose }: Props) {
   const save = async () => {
     if (!title.trim()) return
     setSaving(true)
-    await updateBookMeta(book.id, {
-      title,
-      author: author.trim() || null,
-      cover: removeCover ? null : (newCover ?? undefined),
-    })
-    setSaving(false)
-    onClose()
+    setError(null)
+    try {
+      await updateBookMeta(book.id, {
+        title,
+        author: author.trim() || null,
+        cover: removeCover ? null : (newCover ?? undefined),
+      })
+      onClose()
+    } catch {
+      setError('Could not save changes. Check available storage and try again.')
+    } finally { setSaving(false) }
   }
 
   return (
@@ -105,6 +110,7 @@ export default function AudiobookEditModal({ book, onClose }: Props) {
           />
         </label>
 
+        {error && <p role="alert">{error}</p>}
         <div className="actions">
           <button className="btn" onClick={onClose}>
             Cancel

@@ -1,5 +1,5 @@
 // Core
-import { useState, type CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
 // Components
 import {
   PlayIcon,
@@ -34,12 +34,11 @@ export default function MiniPlayer() {
     seek,
   } = usePlayerStore()
   const openFullPlayer = useUiStore((s) => s.openFullPlayer)
-  const [seeking, setSeeking] = useState<number | null>(null)
 
   if (!nowPlaying) return null
 
   const totalDuration = duration || 0
-  const shownTime = Math.min(seeking ?? currentTime, totalDuration || currentTime)
+  const shownTime = Math.min(currentTime, totalDuration || currentTime)
   const progress = totalDuration > 0 ? Math.min(100, (shownTime / totalDuration) * 100) : 0
   const queueIndex = source === 'music' ? musicQueueIndex : bookQueueIndex
   const queueLength = source === 'music' ? musicQueue.length : bookQueue.length
@@ -50,7 +49,6 @@ export default function MiniPlayer() {
   const seekTo = (time: number) => seek(Math.max(0, Math.min(time, totalDuration || time)))
   const jumpBy = (seconds: number) => {
     seekTo(shownTime + seconds)
-    setSeeking(null)
   }
 
   return (
@@ -86,13 +84,8 @@ export default function MiniPlayer() {
             } as CSSProperties}
             onChange={(e) => {
               const value = Number(e.target.value)
-              setSeeking(value)
               seekTo(value)
             }}
-            onMouseUp={() => setSeeking(null)}
-            onTouchEnd={() => setSeeking(null)}
-            onKeyUp={() => setSeeking(null)}
-            onBlur={() => setSeeking(null)}
           />
           <div className="mini-times">
             <span>{formatTime(shownTime)}</span>

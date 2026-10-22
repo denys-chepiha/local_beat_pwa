@@ -51,3 +51,9 @@ describe('music import', () => {
     expect(useLibraryStore.getState().getPlaylistTracks(playlist.id)).toHaveLength(1)
   })
 })
+
+it('does not leave orphaned media when a playlist disappears before import commits', async () => {
+  await expect(useLibraryStore.getState().addFiles('deleted', [new File(['audio'], 'song.mp3')])).rejects.toThrow('Playlist was deleted')
+  expect(await db.blobs.count()).toBe(0)
+  expect(await db.tracks.count()).toBe(0)
+})

@@ -17,13 +17,14 @@ export function useAudiobookCoverUrl(blobId: string | undefined): string | null 
       setUrl(null)
       return
     }
+    setUrl(null)
     let objectUrl: string | null = null
     let cancelled = false
     void getBlob(blobId).then((record) => {
       if (cancelled || !record) return
       objectUrl = URL.createObjectURL(record.blob)
       setUrl(objectUrl)
-    })
+    }).catch(() => { if (!cancelled) setUrl(null) })
     return () => {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)

@@ -139,9 +139,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         const updatedAt = Date.now()
         const ids = newTracks.map((t) => t.id)
         await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
+          const playlist = await db.playlists.get(playlistId)
+          if (!playlist) throw new Error('Playlist was deleted during import')
           await db.tracks.bulkAdd(newTracks)
           await db.blobs.bulkAdd(newBlobs)
-          const playlist = await db.playlists.get(playlistId)
           if (playlist) {
             await db.playlists.update(playlistId, {
               trackIds: [...ids, ...playlist.trackIds],

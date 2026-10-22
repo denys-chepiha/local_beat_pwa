@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import MiniPlayer from '@/components/MiniPlayer'
 import { usePlayerStore } from '@/store/usePlayerStore'
 
@@ -43,4 +43,15 @@ describe('mini player navigation', () => {
     expect(screen.getByRole('button', { name: 'Previous track' })).toHaveProperty('disabled', bookQueueIndex === 0)
     expect(screen.getByRole('button', { name: 'Next track' })).toHaveProperty('disabled', bookQueueIndex === 2)
   })
+})
+
+
+it('shows live progress after seeking without a release event and after changing tracks', () => {
+  usePlayerStore.setState({ duration: 180, currentTime: 0, seek: (time) => usePlayerStore.setState({ currentTime: time }) })
+  render(<MiniPlayer />)
+  fireEvent.change(screen.getByRole('slider'), { target: { value: '90' } })
+  act(() => usePlayerStore.setState({ currentTime: 91 }))
+  expect(screen.getByRole('slider')).toHaveValue('91')
+  act(() => usePlayerStore.setState({ currentTrackId: 'next', currentTime: 0, duration: 120 }))
+  expect(screen.getByRole('slider')).toHaveValue('0')
 })

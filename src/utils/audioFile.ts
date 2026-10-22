@@ -1,6 +1,3 @@
-// Core
-import jsmediatags from 'jsmediatags'
-
 const SUPPORTED_EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac', 'oga', 'opus']
 const METADATA_TIMEOUT_MS = 8000
 
@@ -98,7 +95,8 @@ function cleanTag(value?: string): string | undefined {
 }
 
 /** Read ID3 / tag metadata (title, artist, album, cover art). */
-function readTags(file: File): Promise<Partial<ExtractedMeta>> {
+async function readTags(file: File): Promise<Partial<ExtractedMeta>> {
+  const { default: jsmediatags } = await import('jsmediatags')
   return new Promise((resolve) => {
     let settled = false
     const finish = (tags: Partial<ExtractedMeta>) => {

@@ -1,9 +1,10 @@
 // Core
 import { create } from 'zustand'
 
-export type AppSection = 'music' | 'audiobooks'
+export type AppSection = 'music' | 'audiobooks' | 'video'
 
 export type Screen =
+  | { name: 'video' }
   | { name: 'home' }
   | { name: 'playlist'; playlistId: string }
   | { name: 'settings' }
@@ -12,6 +13,7 @@ export type Screen =
 
 const SECTION_BY_SCREEN: Record<Screen['name'], AppSection> = {
   home: 'music',
+  video: 'video',
   playlist: 'music',
   settings: 'music',
   audiobooks: 'audiobooks',
@@ -22,6 +24,7 @@ interface UiState {
   screen: Screen
   fullPlayerOpen: boolean
   toast: string | null
+  openVideo: () => void
   goHome: () => void
   openPlaylist: (playlistId: string) => void
   openSettings: () => void
@@ -38,6 +41,7 @@ export const useUiStore = create<UiState>((set) => ({
   screen: { name: 'home' },
   fullPlayerOpen: false,
   toast: null,
+  openVideo: () => set({ screen: { name: 'video' }, fullPlayerOpen: false }),
   goHome: () => set({ screen: { name: 'home' } }),
   openPlaylist: (playlistId) => set({ screen: { name: 'playlist', playlistId } }),
   openSettings: () => set({ screen: { name: 'settings' } }),

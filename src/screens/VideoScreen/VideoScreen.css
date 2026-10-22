@@ -1,0 +1,50 @@
+.video-screen { padding: 24px; flex: 1; min-width: 0; }
+.video-stage { position: relative; background: #000; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; color: #fff; }
+.video-stage video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.video-stage--expanded, .video-stage:fullscreen { position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; aspect-ratio: auto; border-radius: 0; }
+.video-stage--quiet { cursor: none; }
+.video-empty { height: 100%; min-height: 320px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 20px; background: var(--bg-elev); padding: 32px 20px; }
+.video-empty svg { color: var(--text-dim); }
+.video-empty p, .video-note { color: var(--text-dim); max-width: 62ch; line-height: 1.6; }
+.video-note { margin-top: 24px; font-size: 14px; }
+.video-details { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; }
+.video-details > div { min-width: 0; }
+.video-details h2 { font-size: 18px; overflow-wrap: anywhere; }
+.video-details p { color: var(--text-dim); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.video-details button { flex-shrink: 0; }
+.video-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; opacity: 1; transition: opacity 180ms; }
+.video-overlay--hidden { opacity: 0; }
+.video-overlay--hidden { visibility: hidden; }
+.video-top-controls, .video-bottom-controls { pointer-events: auto; padding: 12px 16px; background: rgba(0,0,0,.85); }
+.video-top-controls { display: flex; align-items: center; gap: 8px; padding-top: max(12px, env(safe-area-inset-top)); }
+.video-bottom-controls { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.video-filename { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
+.video-control { min-height: 44px; min-width: 44px; padding: 8px; border-radius: 8px; display: inline-flex; gap: 4px; align-items: center; justify-content: center; font-size: 13px; white-space: nowrap; }
+.video-control:hover { background: rgba(255,255,255,.15); }
+.video-control:disabled { opacity: .35; cursor: default; }
+.video-control--play { background: #fff; color: #111; }
+.video-control--play:hover { background: #ddd; }
+.video-timeline { display: flex; align-items: center; gap: 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.video-timeline input { flex: 1; min-width: 0; }
+.video-transport { flex-wrap: wrap; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+.video-volume { width: 72px; }
+.video-speed select { background: #25252d; color: #fff; border: 0; padding: 10px 4px; border-radius: 6px; min-height: 44px; font: inherit; }
+.video-queue { position: absolute; right: 0; top: 0; bottom: 0; width: min(420px, 100%); background: var(--bg-elev); padding: 12px 16px; z-index: 2; overflow-y: auto; cursor: auto; }
+.video-queue-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.video-queue h2 { font-size: 20px; }
+.video-queue ol { list-style: none; margin-top: 16px; }
+.video-queue li { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.video-queue li > button:first-child { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; padding: 16px 8px; text-align: left; }
+.video-queue li span:last-child { overflow-wrap: anywhere; }
+.video-queue .is-active { background: var(--bg-elev-2); color: #c2b4ff; }
+.video-error { position: absolute; top: 64px; left: 16px; right: 16px; padding: 12px; background: #34232b; color: #ffb4c2; line-height: 1.5; font-size: 14px; }
+@media (max-width: 600px) {
+  .video-screen { padding: 16px; }
+  .video-stage:not(.video-stage--expanded) { aspect-ratio: auto; height: 360px; }
+  .video-details { align-items: flex-start; flex-direction: column; }
+  .video-transport { gap: 2px; flex-wrap: wrap; }
+  .video-volume { display: none; }
+  .video-filename { display: none; }
+  .video-top-controls { justify-content: space-between; }
+}
+@media (prefers-reduced-motion: reduce) { .video-overlay { transition: none; } }

@@ -150,6 +150,7 @@ describe('duplicate detection and replace', () => {
     expect(replaced.progressPercent).toBeGreaterThan(0)
     expect(useAudiobookStore.getState().getBook(original.id)).toBeUndefined()
     const newChapters = useAudiobookStore.getState().getChapters(replaced.id)
+    expect(replaced.currentChapterId).toBe(newChapters[0].id)
     expect(newChapters[0].completed).toBe(true)
     expect(newChapters[0].lastPosition).toBe(30)
   })
@@ -236,4 +237,19 @@ describe('progress lifecycle', () => {
     expect(updated.status).toBe('in_progress')
     expect(updated.lastOpenedAt).toBeTruthy()
   })
+})
+
+it('preserves the old cover if saving replacement metadata fails', async () => {
+  const book = await useAudiobookStore.getState().importBook({
+    title: 'Cover rollback', chapters: makeChapters(1), fingerprint: 'cover-rollback',
+    cover: new Blob(['original'], { type: 'image/png' }),
+  })
+  const blobCount = await db.audiobookBlobs.count()
+  vi.spyOn(db.audiobooks, 'update').mockRejectedValueOnce(new Error('Storage full'))
+  await expect(useAudiobookStore.getState().updateBookMeta(book.id, {
+    cover: new Blob(['replacement'], { type: 'image/png' }),
+  })).rejects.toThrow('Storage full')
+  expect(await db.audiobookBlobs.count()).toBe(blobCount)
+  expect(await db.audiobookBlobs.get(book.coverBlobId!)).toBeDefined()
+  expect(useAudiobookStore.getState().getBook(book.id)?.coverBlobId).toBe(book.coverBlobId)
 })

@@ -1,0 +1,6 @@
+.chepio-footer { background: rgba(0,0,0,.3); border-top: 1px solid var(--border); }
+.chepio-footer__inner { padding: 12px 24px; display: flex; justify-content: flex-end; }
+.chepio-footer a { display: inline-flex; opacity: .25; transition: opacity .2s; }
+.chepio-footer img { height: 28px; width: auto; filter: brightness(0) invert(1); }
+.chepio-footer a:hover, .chepio-footer a:focus-visible { opacity: 1; }
+.chepio-footer a:hover img { filter: none; }

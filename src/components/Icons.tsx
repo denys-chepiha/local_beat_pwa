@@ -221,3 +221,7 @@ export const GripHorizontalIcon = (p: IconProps) => (
     <circle cx="15" cy="16" r="1" fill="currentColor" />
   </svg>
 )
+
+export function VideoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></svg>
+}

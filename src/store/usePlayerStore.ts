@@ -40,6 +40,8 @@ const CONTINUE_REWIND_MIN_POSITION = 8
  * auto-resume when the app returns to the foreground.
  */
 let intendedToPlay = false
+let loadGeneration = 0
+let cancelPendingSeek: (() => void) | null = null
 
 function getAudio(): HTMLAudioElement {
   if (!audio) {
@@ -65,16 +67,6 @@ function resetBookCoverCache() {
   currentBookCoverBookId = null
 }
 
-async function getBookCoverUrl(bookId: string, coverBlobId?: string): Promise<string | null> {
-  if (currentBookCoverBookId === bookId) return currentBookCoverUrl
-  resetBookCoverCache()
-  currentBookCoverBookId = bookId
-  if (!coverBlobId) return null
-  const record = await useAudiobookStore.getState().getBlob(coverBlobId)
-  currentBookCoverUrl = record ? URL.createObjectURL(record.blob) : null
-  return currentBookCoverUrl
-}
-
 interface NowPlayingMeta {
   title: string
   subtitle: string
@@ -87,6 +79,8 @@ interface PlayerStore {
   initialized: boolean
   source: PlaybackSource
   isPlaying: boolean
+  isLoading: boolean
+  playbackError: string | null
   currentTime: number
   duration: number
   volume: number
@@ -124,6 +118,8 @@ interface PlayerStore {
   setVolume: (volume: number) => void
   toggleShuffle: () => void
   cycleRepeat: () => void
+  pause: () => void
+  syncMusicQueue: () => void
   stop: () => void
   resume: () => Promise<void>
   handleTrackRemoved: (trackId: string) => void
@@ -149,7 +145,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       queueIndex: s.musicQueueIndex,
       currentBookId: s.currentBookId,
     }
-    void db.playerState.put(state)
+    void db.playerState.put(state).catch(() => set({ playbackError: 'Could not save playback position. Check available storage.' }))
   }
 
   const persistThrottled = () => {
@@ -167,9 +163,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     if (s.source !== 'audiobook' || !s.currentBookId || !s.currentChapterId) return
     void useAudiobookStore
       .getState()
-      .saveChapterProgress(s.currentBookId, s.currentChapterId, { position: s.currentTime })
+      .saveChapterProgress(s.currentBookId, s.currentChapterId, { position: s.currentTime }).catch(() => set({ playbackError: 'Could not save audiobook progress. Check available storage.' }))
     if (listeningAccumSeconds > 0) {
-      void useAudiobookStore.getState().addListeningTime(s.currentBookId, listeningAccumSeconds)
+      void useAudiobookStore.getState().addListeningTime(s.currentBookId, listeningAccumSeconds).catch(() => set({ playbackError: 'Could not save listening time.' }))
       listeningAccumSeconds = 0
     }
   }
@@ -212,19 +208,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
   const registerMediaSessionHandlers = () => {
     if (!('mediaSession' in navigator)) return
     const ms = navigator.mediaSession
-    ms.setActionHandler('play', () => void get().togglePlay())
-    ms.setActionHandler('pause', () => void get().togglePlay())
-    ms.setActionHandler('previoustrack', () => void get().previous())
-    ms.setActionHandler('nexttrack', () => void get().next())
-    ms.setActionHandler('seekto', (d) => {
+    const setAction = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try { ms.setActionHandler(action, handler) } catch { /* Older Safari may not support every action. */ }
+    }
+    setAction('play', () => { if (!get().isPlaying) void get().togglePlay() })
+    setAction('pause', () => get().pause())
+    setAction('previoustrack', () => void get().previous())
+    setAction('nexttrack', () => void get().next())
+    setAction('seekto', (d) => {
       if (typeof d.seekTime === 'number') get().seek(d.seekTime)
     })
     if (get().source === 'audiobook') {
-      ms.setActionHandler('seekforward', (d) => get().seek(get().currentTime + (d.seekOffset || 30)))
-      ms.setActionHandler('seekbackward', (d) => get().seek(get().currentTime - (d.seekOffset || 30)))
+      setAction('seekforward', (d) => get().seek(get().currentTime + (d.seekOffset || 30)))
+      setAction('seekbackward', (d) => get().seek(get().currentTime - (d.seekOffset || 30)))
     } else {
-      ms.setActionHandler('seekforward', null)
-      ms.setActionHandler('seekbackward', null)
+      setAction('seekforward', null)
+      setAction('seekbackward', null)
     }
   }
 
@@ -278,13 +277,47 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     }
   }
 
+  const beginLoad = () => {
+    const generation = ++loadGeneration
+    cancelPendingSeek?.()
+    cancelPendingSeek = null
+    intendedToPlay = false
+    getAudio().pause()
+    set({ isLoading: true, isPlaying: false, playbackError: null, currentTime: 0, duration: 0 })
+    return generation
+  }
+
+  const restorePosition = (position: number, generation: number) => {
+    const a = getAudio()
+    const apply = () => {
+      if (generation !== loadGeneration) return
+      const limit = Number.isFinite(a.duration) ? a.duration : position
+      a.currentTime = Math.max(0, Math.min(position, limit))
+      set({ currentTime: a.currentTime, ...(get().source === 'music' ? { musicCurrentTime: a.currentTime } : {}) })
+      updatePositionState()
+    }
+    if (a.readyState >= 1) apply()
+    else {
+      a.addEventListener('loadedmetadata', apply, { once: true })
+      cancelPendingSeek = () => a.removeEventListener('loadedmetadata', apply)
+    }
+  }
+
+  const failLoad = (generation: number) => {
+    if (generation !== loadGeneration) return
+    intendedToPlay = false
+    set({ isLoading: false, isPlaying: false, playbackError: 'Could not open this audio file. Try selecting it again.' })
+  }
+
   /** Load a music track's blob into the audio element. Plays when `autoplay`. */
-  const loadMusicItem = async (trackId: string, autoplay: boolean) => {
+  const loadMusicItem = async (trackId: string, autoplay: boolean, startAt = 0) => {
+    const generation = beginLoad()
     const lib = useLibraryStore.getState()
     const track = lib.getTrack(trackId)
-    if (!track) return
-    const blobRecord = await lib.getBlob(trackId)
-    if (!blobRecord) return
+    if (!track) { failLoad(generation); return }
+    const blobRecord = await lib.getBlob(trackId).catch(() => undefined)
+    if (generation !== loadGeneration) return
+    if (!blobRecord) { failLoad(generation); return }
 
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
     if (currentCoverUrl) URL.revokeObjectURL(currentCoverUrl)
@@ -300,6 +333,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     set({
       source: 'music',
       currentTrackId: trackId,
+      musicQueueIndex: get().musicQueue.indexOf(trackId),
+      isLoading: false,
       duration: track.duration || 0,
       currentTime: 0,
       musicCurrentTime: 0,
@@ -312,16 +347,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         kind: 'music',
       },
     })
+    restorePosition(startAt, generation)
     setMusicMediaSession(track)
 
     if (autoplay) {
       try {
         await a.play()
       } catch {
-        set({ isPlaying: false })
+        if (generation === loadGeneration) set({ isPlaying: false })
       }
     }
-    persistPlayerState()
+    if (generation === loadGeneration) persistPlayerState()
   }
 
   const playAtIndex = async (index: number, autoplay = true) => {
@@ -338,13 +374,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     autoplay: boolean,
     startAtOverride?: number,
   ) => {
+    const generation = beginLoad()
     const abStore = useAudiobookStore.getState()
     const chapters = abStore.getChapters(bookId)
     const chapter = chapters[index]
-    if (!chapter) return
+    if (!chapter) { failLoad(generation); return }
     const book = abStore.getBook(bookId)
-    const blobRecord = await abStore.getBlob(chapter.audioBlobId)
-    if (!blobRecord) return
+    const [blobRecord, coverRecord] = await Promise.all([
+      abStore.getBlob(chapter.audioBlobId),
+      book?.coverBlobId && currentBookCoverBookId !== bookId ? abStore.getBlob(book.coverBlobId).catch(() => undefined) : undefined,
+    ]).catch(() => [undefined, undefined])
+    if (generation !== loadGeneration) return
+    if (!blobRecord) { failLoad(generation); return }
 
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
     if (currentCoverUrl) {
@@ -352,7 +393,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       currentCoverUrl = null
     }
     currentObjectUrl = URL.createObjectURL(blobRecord.blob)
-    const coverUrl = await getBookCoverUrl(bookId, book?.coverBlobId)
+    if (currentBookCoverBookId !== bookId) {
+      resetBookCoverCache()
+      currentBookCoverBookId = bookId
+      currentBookCoverUrl = coverRecord ? URL.createObjectURL(coverRecord.blob) : null
+    }
+    const coverUrl = currentBookCoverUrl
 
     const a = getAudio()
     a.src = currentObjectUrl
@@ -362,6 +408,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
     set({
       source: 'audiobook',
+      isLoading: false,
       currentBookId: bookId,
       currentChapterId: chapter.id,
       currentChapterIndex: index,
@@ -379,30 +426,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         chapterPosition: { index, count: chapters.length },
       },
     })
+    restorePosition(startAt, generation)
     setAudiobookMediaSession(chapter, book, coverUrl)
 
     if (autoplay) {
       try {
         await a.play()
       } catch {
-        set({ isPlaying: false })
+        if (generation === loadGeneration) set({ isPlaying: false })
       }
     }
 
-    if (startAt > 0) {
-      const applySeek = () => {
-        a.currentTime = Math.min(startAt, a.duration || startAt)
-        set({ currentTime: a.currentTime })
-      }
-      if (a.readyState >= 1) applySeek()
-      else a.addEventListener('loadedmetadata', applySeek, { once: true })
-    }
 
-    void abStore.saveChapterProgress(bookId, chapter.id, { position: startAt })
+    if (generation !== loadGeneration) return
+    void abStore.saveChapterProgress(bookId, chapter.id, { position: startAt }).catch(() => set({ playbackError: 'Could not save audiobook progress.' }))
     persistPlayerState()
   }
 
   const handleChapterEnded = async () => {
+    const generation = loadGeneration
     const { currentBookId, currentChapterId, bookQueueIndex, bookQueue } = get()
     if (!currentBookId || !currentChapterId) return
     const abStore = useAudiobookStore.getState()
@@ -412,8 +454,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       position: finalPosition,
       completed: true,
     })
+    if (generation !== loadGeneration) return
     if (bookQueueIndex >= bookQueue.length - 1) {
       await abStore.markCompleted(currentBookId)
+      if (generation !== loadGeneration) return
       intendedToPlay = false
       set({ isPlaying: false })
       return
@@ -425,6 +469,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     initialized: false,
     source: 'music',
     isPlaying: false,
+    isLoading: false,
+    playbackError: null,
     currentTime: 0,
     duration: 0,
     volume: 1,
@@ -455,6 +501,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
           const a = getAudio()
 
           a.addEventListener('timeupdate', () => {
+            if (get().isLoading || get().canResume || !a.src || a.readyState < 1) return
             const s = get()
             set({ currentTime: a.currentTime, ...(s.source === 'music' ? { musicCurrentTime: a.currentTime } : {}) })
             if (s.source === 'music') {
@@ -464,6 +511,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             }
           })
           a.addEventListener('durationchange', () => {
+            if (get().isLoading || get().canResume) return
             if (Number.isFinite(a.duration) && a.duration > 0) {
               set({ duration: a.duration })
               updatePositionState()
@@ -493,7 +541,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             if (get().source === 'audiobook') flushAudiobookProgressNow()
           })
           a.addEventListener('ended', () => {
-            if (get().source === 'audiobook') void handleChapterEnded()
+            if (get().isLoading) return
+            if (get().source === 'audiobook') void handleChapterEnded().catch(() => set({ isPlaying: false, playbackError: 'Could not advance the audiobook. Try Next again.' }))
             else if (get().repeatMode === 'one') {
               a.currentTime = 0
               set({ currentTime: 0, musicCurrentTime: 0 })
@@ -504,9 +553,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
           a.addEventListener('stalled', () =>
             console.warn('[player] stalled — network/decode stall while', document.hidden ? 'hidden' : 'visible'),
           )
-          a.addEventListener('error', () =>
-            console.error('[player] media error', a.error?.code, a.error?.message),
-          )
+          a.addEventListener('error', () => { if (a.error) failLoad(loadGeneration) })
 
           // Safety net: if iOS suspended playback while backgrounded, resume the
           // moment the app comes back to the foreground (intent is still "playing").
@@ -667,8 +714,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         startAt = raw > CONTINUE_REWIND_MIN_POSITION ? raw - CONTINUE_REWIND_SECONDS : raw
       }
 
-      await abStore.recordPlayStart(bookId)
+      const recording = abStore.recordPlayStart(bookId).catch(() => set({ playbackError: 'Could not save listening history.' }))
       await loadChapterAtIndex(bookId, targetIndex, true, startAt)
+      await recording
     },
 
     async playChapter(bookId, chapterId) {
@@ -676,6 +724,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     async togglePlay() {
+      const session = get()
+      if (session.source === 'music' && session.currentTrackId) {
+        setMusicMediaSession(useLibraryStore.getState().getTrack(session.currentTrackId))
+      } else if (session.currentBookId && session.currentChapterId) {
+        const books = useAudiobookStore.getState()
+        const chapter = books.getChapters(session.currentBookId).find((item) => item.id === session.currentChapterId)
+        if (chapter) setAudiobookMediaSession(chapter, books.getBook(session.currentBookId), session.coverUrl)
+      }
+      registerMediaSessionHandlers()
       const a = getAudio()
       const { currentTrackId, currentBookId, canResume, source } = get()
       const hasCurrent = source === 'music' ? !!currentTrackId : !!currentBookId
@@ -761,7 +818,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
     seek(time) {
       const a = getAudio()
-      const clamped = Math.max(0, Math.min(time, a.duration || time))
+      if (!Number.isFinite(time) || get().isLoading || get().canResume || !a.src) return
+      const limit = Number.isFinite(a.duration) ? a.duration : get().duration
+      const clamped = Math.max(0, Math.min(time, limit || time))
       a.currentTime = clamped
       const s = get()
       set({ currentTime: clamped, ...(s.source === 'music' ? { musicCurrentTime: clamped } : {}) })
@@ -770,6 +829,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     setVolume(volume) {
+      if (!Number.isFinite(volume)) return
       const v = Math.max(0, Math.min(1, volume))
       getAudio().volume = v
       set({ volume: v })
@@ -811,7 +871,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       persistPlayerState()
     },
 
+    pause() {
+      ++loadGeneration
+      cancelPendingSeek?.()
+      cancelPendingSeek = null
+      intendedToPlay = false
+      getAudio().pause()
+      set({ isPlaying: false, isLoading: false })
+      if (get().source === 'audiobook') flushAudiobookProgressNow()
+      persistPlayerState()
+    },
+
+    syncMusicQueue() {
+      const s = get()
+      const playlist = s.currentPlaylistId ? useLibraryStore.getState().getPlaylist(s.currentPlaylistId) : undefined
+      if (!playlist || s.shuffleEnabled) return
+      set({ musicQueue: playlist.trackIds.slice(), musicQueueIndex: s.currentTrackId ? playlist.trackIds.indexOf(s.currentTrackId) : -1 })
+      persistPlayerState()
+    },
+
     stop() {
+      get().pause()
       const a = getAudio()
       intendedToPlay = false
       if (get().source === 'audiobook') flushAudiobookProgressNow()
@@ -822,46 +902,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     async resume() {
-      const { source } = get()
-      const a = getAudio()
-      const applyAndPlay = async (targetTime: number) => {
-        if (targetTime > 0 && Number.isFinite(a.duration)) {
-          a.currentTime = Math.min(targetTime, a.duration)
-        }
-        try {
-          await a.play()
-        } catch {
-          set({ isPlaying: false })
-        }
-      }
-      const whenReady = (targetTime: number) => {
-        if (a.readyState >= 1) return applyAndPlay(targetTime)
-        return new Promise<void>((resolve) => {
-          a.addEventListener('loadedmetadata', () => void applyAndPlay(targetTime).then(resolve), {
-            once: true,
-          })
-        })
-      }
-
-      if (source === 'music') {
-        const { currentTrackId, musicQueue, currentTime } = get()
-        if (!currentTrackId) return
-        const idx = musicQueue.indexOf(currentTrackId)
-        set({ musicQueueIndex: idx >= 0 ? idx : get().musicQueueIndex })
-        await loadMusicItem(currentTrackId, false)
-        await whenReady(currentTime)
-      } else {
-        const { currentBookId, currentChapterIndex, currentTime } = get()
-        if (!currentBookId) return
-        await loadChapterAtIndex(currentBookId, currentChapterIndex, false, currentTime)
-        await whenReady(currentTime)
+      const s = get()
+      if (s.source === 'music' && s.currentTrackId) {
+        await loadMusicItem(s.currentTrackId, true, s.currentTime)
+      } else if (s.currentBookId) {
+        await loadChapterAtIndex(s.currentBookId, s.currentChapterIndex, true, s.currentTime)
       }
     },
 
     handleTrackRemoved(trackId) {
       const { musicQueue, currentTrackId } = get()
       const newQueue = musicQueue.filter((id) => id !== trackId)
-      if (currentTrackId === trackId) {
+      if (currentTrackId === trackId && get().source === 'music') {
+        get().pause()
         intendedToPlay = false
         getAudio().pause()
         if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
@@ -890,6 +943,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     handleBookRemoved(bookId) {
       const { currentBookId } = get()
       if (currentBookId !== bookId) return
+      if (get().source !== 'audiobook') { set({ currentBookId: null, currentChapterId: null, bookQueue: [], bookQueueIndex: -1 }); persistPlayerState(); return }
+      get().pause()
       intendedToPlay = false
       getAudio().pause()
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)

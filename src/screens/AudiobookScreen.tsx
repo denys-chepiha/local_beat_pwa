@@ -1,5 +1,6 @@
 // Core
 import { useState } from 'react'
+import { shallow } from 'zustand/shallow'
 // Components
 import AudiobookActionMenu from '@/components/AudiobookActionMenu'
 import AudiobookEditModal from '@/components/AudiobookEditModal'
@@ -21,7 +22,11 @@ interface Props {
 export default function AudiobookScreen({ bookId }: Props) {
   const book = useAudiobookStore((s) => s.books.find((b) => b.id === bookId))
   const chapters = useAudiobookStore((s) => s.chaptersByBook[bookId] ?? [])
-  const player = usePlayerStore()
+  const player = usePlayerStore((s) => ({
+    source: s.source, currentBookId: s.currentBookId, currentChapterId: s.currentChapterId,
+    currentTime: Math.floor(s.currentTime), nowPlaying: s.nowPlaying, isPlaying: s.isPlaying,
+    togglePlay: s.togglePlay, playChapter: s.playChapter,
+  }), shallow)
   const openAudiobookLibrary = useUiStore((s) => s.openAudiobookLibrary)
   const actions = useAudiobookActions()
   const coverUrl = useAudiobookCoverUrl(book?.coverBlobId)

@@ -3,7 +3,6 @@ import { useState } from 'react'
 // Components
 import PlaylistCard from '@/components/PlaylistCard'
 import PlaylistFormModal from '@/components/PlaylistFormModal'
-import SectionSwitcher from '@/components/SectionSwitcher'
 import { PlusIcon, SettingsIcon, MusicIcon } from '@/components/Icons'
 // Store
 import { useLibraryStore } from '@/store/useLibraryStore'
@@ -45,7 +44,6 @@ export default function HomeScreen() {
         </button>
       </header>
 
-      <SectionSwitcher />
 
       <section className="home-playlists" aria-labelledby="home-playlists-title">
         <div className="section-title" id="home-playlists-title">

@@ -1,5 +1,6 @@
 // Core
 import { useEffect, useState } from 'react'
+import { shallow } from 'zustand/shallow'
 // Components
 import { BackIcon, BookIcon, TrashIcon, MusicIcon } from '@/components/Icons'
 // Services
@@ -21,7 +22,9 @@ export default function SettingsScreen() {
   const audiobooks = useAudiobookStore((s) => s.books)
   const chaptersByBook = useAudiobookStore((s) => s.chaptersByBook)
   const clearAllBooks = useAudiobookStore((s) => s.clearAllBooks)
-  const player = usePlayerStore()
+  const player = usePlayerStore((s) => ({ source: s.source, nowPlaying: s.nowPlaying,
+    stop: s.stop, handleTrackRemoved: s.handleTrackRemoved, handleBookRemoved: s.handleBookRemoved,
+  }), shallow)
   const { goHome, showToast } = useUiStore()
   const [confirm, setConfirm] = useState<ConfirmKind>(null)
   const [deviceStorage, setDeviceStorage] = useState<{ usage: number; quota: number } | null>(null)
@@ -40,7 +43,7 @@ export default function SettingsScreen() {
       : null
 
   const stopEverything = () => {
-    player.stop()
+    if (player.source === 'music') player.stop()
     Object.keys(tracks).forEach((id) => player.handleTrackRemoved(id))
   }
 

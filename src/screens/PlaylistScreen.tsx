@@ -1,7 +1,8 @@
 // Core
 import { useEffect, useRef, useState } from 'react'
+import { shallow } from 'zustand/shallow'
 // Components
-import TrackList from '@/components/TrackList'
+import TrackList from '@/components/TrackList/TrackList'
 import PlaylistFormModal from '@/components/PlaylistFormModal'
 import { BackIcon, PlusIcon, MusicIcon, EditIcon, FolderPlusIcon } from '@/components/Icons'
 // Store
@@ -21,7 +22,10 @@ export default function PlaylistScreen({ playlistId }: Props) {
   const playlist = useLibraryStore((s) => s.getPlaylist(playlistId))
   const tracks = useLibraryStore((s) => s.getPlaylistTracks(playlistId))
   const { addFiles, removeTrack, renameTrack, reorderTracks, importProgress } = useLibraryStore()
-  const player = usePlayerStore()
+  const player = usePlayerStore((s) => ({ source: s.source, currentTrackId: s.currentTrackId,
+    nowPlaying: s.nowPlaying, togglePlay: s.togglePlay, playPlaylist: s.playPlaylist,
+    handleTrackRemoved: s.handleTrackRemoved, syncMusicQueue: s.syncMusicQueue,
+  }), shallow)
   const { goHome, showToast } = useUiStore()
   // Android document providers can report audio as application/octet-stream.
   // Let the user select it, then validate its MIME type/extension in addFiles.
@@ -92,7 +96,7 @@ export default function PlaylistScreen({ playlistId }: Props) {
   }
 
   const handleReorder = (trackIds: string[]) => {
-    void reorderTracks(playlistId, trackIds)
+    void reorderTracks(playlistId, trackIds).then(() => player.syncMusicQueue()).catch(() => showToast('Could not save track order. Try again.'))
   }
 
   return (

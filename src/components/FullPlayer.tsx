@@ -1,5 +1,5 @@
 // Core
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 // Components
 import {
   PlayIcon,
@@ -36,9 +36,7 @@ export default function FullPlayer() {
   } = player
   const closeFullPlayer = useUiStore((s) => s.closeFullPlayer)
 
-  // Local seek state so dragging the slider feels smooth.
-  const [seeking, setSeeking] = useState<number | null>(null)
-  const shownTime = seeking ?? currentTime
+  const shownTime = currentTime
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,7 +49,7 @@ export default function FullPlayer() {
   if (!nowPlaying) return null
 
   const isAudiobook = source === 'audiobook'
-  const supportsVolume = !/iPhone|iPad|iPod/.test(navigator.userAgent)
+  const supportsVolume = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
 
   return (
     <div className="full-player">
@@ -86,15 +84,9 @@ export default function FullPlayer() {
           max={duration || 0}
           step={0.1}
           value={Math.min(shownTime, duration || 0)}
-          onChange={(e) => setSeeking(Number(e.target.value))}
-          onMouseUp={(e) => {
-            player.seek(Number((e.target as HTMLInputElement).value))
-            setSeeking(null)
-          }}
-          onTouchEnd={(e) => {
-            player.seek(Number((e.target as HTMLInputElement).value))
-            setSeeking(null)
-          }}
+          aria-label="Seek track"
+          disabled={duration <= 0 || player.isLoading || player.canResume}
+          onChange={(e) => player.seek(Number(e.target.value))}
         />
         <div className="times">
           <span>{formatTime(shownTime)}</span>
