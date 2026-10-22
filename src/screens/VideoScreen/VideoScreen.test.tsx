@@ -127,6 +127,16 @@ it('keeps volume controls on the right and indicates zero volume as muted', () =
   fireEvent.click(screen.getByRole('button', { name: 'Unmute video' }))
   expect(container.querySelector('video')!.volume).toBe(1)
   expect(container.querySelector('video')!.muted).toBe(false)
+  fireEvent.change(slider, { target: { value: 0.37 } })
+  fireEvent.click(screen.getByRole('button', { name: 'Mute video' }))
+  expect(slider).toHaveValue('0')
+  expect(screen.getByRole('button', { name: 'Unmute video' })).toHaveClass('video-control--muted')
+  fireEvent.click(screen.getByRole('button', { name: 'Unmute video' }))
+  expect(slider).toHaveValue('0.37')
+  expect(container.querySelector('video')!.volume).toBe(0.37)
+  fireEvent.change(slider, { target: { value: 0 } })
+  fireEvent.click(screen.getByRole('button', { name: 'Unmute video' }))
+  expect(slider).toHaveValue('0.37')
 })
 
 it('shows preview only after holding for one second and commits on release', () => {

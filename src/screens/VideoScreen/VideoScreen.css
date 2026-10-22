@@ -50,8 +50,27 @@
 @media (prefers-reduced-motion: reduce) { .video-overlay { transition: none; } }
 .video-right-controls { margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .video-volume-control { display: flex; align-items: center; gap: 6px; min-height: 44px; }
-.video-volume-control .video-volume { display: block; width: clamp(70px, 10vw, 120px); min-height: 44px; touch-action: none; }
-.video-control--muted { color: #ff555f; background: rgba(255,60,70,.12); }
+.video-volume-control .video-volume {
+  display: block; width: clamp(80px, 10vw, 120px); height: 44px; min-height: 44px;
+  margin: 0; padding: 0; background: transparent; border-radius: 0; touch-action: none; cursor: pointer;
+}
+.video-volume-control .video-volume::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 2px;
+  background: linear-gradient(to right, #fff 0 var(--volume-fill), #ffffff50 var(--volume-fill) 100%);
+}
+.video-volume-control .video-volume::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 12px; height: 12px; margin-top: -4.5px;
+  border: 0; border-radius: 50%; background: #fff; box-shadow: none;
+}
+.video-volume-control .video-volume::-moz-range-track {
+  height: 3px; border-radius: 2px;
+  background: linear-gradient(to right, #fff 0 var(--volume-fill), #ffffff50 var(--volume-fill) 100%);
+}
+.video-volume-control .video-volume::-moz-range-thumb {
+  width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; box-shadow: none;
+}
+.video-volume-control .video-volume:focus-visible { outline: 2px solid #c2b4ff; outline-offset: 2px; border-radius: 4px; }
+.video-control--muted { color: #ff555f; }
 .video-seek-wrap { position: relative; flex: 1; min-width: 0; }
 .video-seek-wrap input { width: 100%; min-height: 32px; touch-action: none; }
 .video-seek-preview { position: absolute; bottom: 52px; transform: translateX(-50%); width: 160px; background: #111; border: 1px solid #777; border-radius: 8px; overflow: hidden; pointer-events: none; text-align: center; box-shadow: 0 4px 16px #0008; }

@@ -1,7 +1,7 @@
 // Core
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 // Components
-import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, XIcon, VolumeIcon } from '@/components/Icons'
+import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, XIcon } from '@/components/Icons'
 // Services
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
@@ -238,8 +238,8 @@ export default function VideoScreen() {
                   <button className="video-control" aria-label={`Repeat video: ${repeat}`} aria-pressed={repeat !== 'off'} onClick={() => setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off')}>Repeat: {repeat}</button>
                   <label className="video-speed"><span className="sr-only">Playback speed</span><select aria-label="Playback speed" value={rate} onChange={(e) => { const v = Number(e.target.value); setRate(v); if (videoRef.current) videoRef.current.playbackRate = v }}>{[0.5,0.75,1,1.25,1.5,2].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}</select></label>
                   <div className="video-right-controls">
-                    <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z M16 9l6 6m0-6-6 6" /></svg></button>
-                    <label className="video-volume-control"><VolumeIcon width={18} height={18} /><input className="video-volume" aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
+                    <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d={muted || volume === 0 ? "M16 9l6 6m0-6-6 6" : "M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"} /></svg></button>
+                    <label className="video-volume-control"><input className="video-volume" style={{ "--volume-fill": `${(muted ? 0 : volume) * 100}%` } as CSSProperties} aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
                     <button className="video-control" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={expanded ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} /></svg></button>
                   </div>
                 </div>
