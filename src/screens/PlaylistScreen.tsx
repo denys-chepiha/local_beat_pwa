@@ -1,7 +1,8 @@
 // Core
 import { useEffect, useRef, useState } from 'react'
+import { shallow } from 'zustand/shallow'
 // Components
-import TrackList from '@/components/TrackList'
+import TrackList from '@/components/TrackList/TrackList'
 import PlaylistFormModal from '@/components/PlaylistFormModal'
 import { BackIcon, PlusIcon, MusicIcon, EditIcon, FolderPlusIcon } from '@/components/Icons'
 // Store
@@ -21,8 +22,14 @@ export default function PlaylistScreen({ playlistId }: Props) {
   const playlist = useLibraryStore((s) => s.getPlaylist(playlistId))
   const tracks = useLibraryStore((s) => s.getPlaylistTracks(playlistId))
   const { addFiles, removeTrack, renameTrack, reorderTracks, importProgress } = useLibraryStore()
-  const player = usePlayerStore()
+  const player = usePlayerStore((s) => ({ source: s.source, currentTrackId: s.currentTrackId,
+    nowPlaying: s.nowPlaying, togglePlay: s.togglePlay, playPlaylist: s.playPlaylist,
+    handleTrackRemoved: s.handleTrackRemoved, syncMusicQueue: s.syncMusicQueue,
+  }), shallow)
   const { goHome, showToast } = useUiStore()
+  // Android document providers can report audio as application/octet-stream.
+  // Let the user select it, then validate its MIME type/extension in addFiles.
+  const accept = /Android/i.test(navigator.userAgent) ? undefined : ACCEPT
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dirInputRef = useRef<HTMLInputElement>(null)
@@ -55,20 +62,28 @@ export default function PlaylistScreen({ playlistId }: Props) {
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
     const files = Array.from(fileList)
-    const result = await addFiles(playlistId, files)
-    if (result.added > 0 && result.skipped.length > 0) {
-      showToast(`Added ${result.added}, skipped ${result.skipped.length} non-audio file(s)`)
-    } else if (result.added > 0) {
-      showToast(`Added ${result.added} track${result.added === 1 ? '' : 's'}`)
-    } else {
-      showToast('No supported audio files found')
+    try {
+      const result = await addFiles(playlistId, files)
+      if (result.added > 0 && result.skipped.length > 0) {
+        showToast(`Added ${result.added}, skipped ${result.skipped.length} file(s)`)
+      } else if (result.added > 0) {
+        showToast(`Added ${result.added} track${result.added === 1 ? '' : 's'}`)
+      } else {
+        showToast('No readable audio files found. Try another file.')
+      }
+    } catch {
+      showToast('Could not save audio files. Check available storage and try again.')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (dirInputRef.current) dirInputRef.current.value = ''
     }
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    if (dirInputRef.current) dirInputRef.current.value = ''
   }
 
   const playTrack = (trackId: string) => {
-    if (player.currentTrackId === trackId) {
+    // Guard on `source` too: `currentTrackId` is the last-known music track
+    // and stays set even while an audiobook is playing, so without this an
+    // audiobook session could be toggled instead of starting this track.
+    if (player.source === 'music' && player.currentTrackId === trackId) {
       void player.togglePlay()
     } else {
       void player.playPlaylist(playlistId, trackId)
@@ -81,11 +96,11 @@ export default function PlaylistScreen({ playlistId }: Props) {
   }
 
   const handleReorder = (trackIds: string[]) => {
-    void reorderTracks(playlistId, trackIds)
+    void reorderTracks(playlistId, trackIds).then(() => player.syncMusicQueue()).catch(() => showToast('Could not save track order. Try again.'))
   }
 
   return (
-    <div className={`playlist-screen${player.currentTrackId ? ' has-mini' : ''}`}>
+    <div className={`playlist-screen${player.nowPlaying ? ' has-mini' : ''}`}>
       <div className="playlist-static">
         <div className="topbar">
           <button className="icon-btn" onClick={goHome} aria-label="Back">
@@ -110,6 +125,7 @@ export default function PlaylistScreen({ playlistId }: Props) {
             onClick={() => dirInputRef.current?.click()}
             aria-label="Add folder"
             title="Add a whole folder"
+            disabled={!!importProgress}
           >
             <FolderPlusIcon />
           </button>
@@ -118,6 +134,7 @@ export default function PlaylistScreen({ playlistId }: Props) {
             onClick={() => fileInputRef.current?.click()}
             aria-label="Add music"
             title="Add files"
+            disabled={!!importProgress}
           >
             <PlusIcon />
           </button>
@@ -126,7 +143,7 @@ export default function PlaylistScreen({ playlistId }: Props) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={ACCEPT}
+          accept={accept}
           multiple
           hidden
           onChange={(e) => void handleFiles(e.target.files)}

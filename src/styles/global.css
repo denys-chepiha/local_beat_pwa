@@ -434,7 +434,6 @@ input {
 .import-bar .fill {
   height: 100%;
   background: var(--accent-grad);
-  transition: width 0.2s;
 }
 
 /* ---------- Mini player ---------- */
@@ -1017,4 +1016,534 @@ input[type='range']::-moz-range-thumb {
   max-width: 90%;
   text-align: center;
   animation: fade 0.2s;
+}
+
+/* ---------- Section switcher (Music / Audio Books) ---------- */
+.section-switcher {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.section-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+.section-tab.active {
+  background: var(--accent-grad);
+  color: #fff;
+}
+
+/* ---------- Generic progress bar (audiobooks + settings) ---------- */
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+.progress-bar .fill {
+  height: 100%;
+  background: var(--accent-grad);
+}
+.progress-bar.large {
+  height: 8px;
+  border-radius: 4px;
+}
+
+/* ---------- Audiobook library ---------- */
+.audiobook-library .card-grid {
+  margin-bottom: 8px;
+}
+.book-card {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  width: 100%;
+}
+.book-card-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 12px;
+  text-align: left;
+}
+.book-card-main:active {
+  transform: scale(0.99);
+  background: var(--surface-hover);
+}
+.book-card-cover {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  background: var(--accent-grad);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.book-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.book-card-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  color: #4ade80;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.book-card-meta {
+  flex: 1;
+  min-width: 0;
+}
+.book-card-meta .title {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-card-meta .author {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-card-meta .chapter-line {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+.book-card-meta .progress-line {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+  margin-top: 6px;
+}
+.book-card-meta .progress-bar {
+  margin-top: 3px;
+}
+.book-card-meta .date {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+.book-card-more {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  align-self: center;
+}
+.book-card-more:active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ---------- Action sheet (book actions menu) ---------- */
+.action-sheet .action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+.action-row {
+  padding: 14px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text);
+}
+.action-row:active {
+  background: var(--surface);
+}
+.action-row.danger {
+  color: var(--danger);
+}
+
+/* ---------- Audiobook import wizard ---------- */
+.import-wizard::before {
+  display: none;
+}
+.import-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 16px;
+}
+.import-source {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
+.import-source .hint {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.import-cover-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.import-cover {
+  width: 96px;
+  height: 96px;
+  border-radius: 14px;
+  background: var(--accent-grad);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.import-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.import-cover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.cover-candidates {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.cover-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+  opacity: 0.6;
+}
+.cover-thumb.active {
+  border-color: var(--accent);
+  opacity: 1;
+}
+.cover-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.field input[type='text'] {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+.field input[type='text']:focus {
+  border-color: var(--accent);
+}
+.import-stats {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 8px 0;
+}
+.chapter-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.chapter-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+}
+.chapter-edit-row .index {
+  width: 20px;
+  font-size: 12px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.chapter-edit-row input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.chapter-edit-row .dur {
+  font-size: 12px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  min-width: 40px;
+  text-align: right;
+}
+.chapter-edit-row button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.chapter-edit-row button:active {
+  background: var(--surface);
+  color: var(--text);
+}
+.chapter-edit-row button:disabled {
+  opacity: 0.3;
+}
+.import-progress-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  padding: 80px 24px;
+  color: var(--text-dim);
+}
+.import-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0 calc(var(--safe-bottom) + 12px);
+  flex-shrink: 0;
+}
+.import-actions .btn {
+  flex: 1;
+}
+
+/* ---------- Audiobook detail ---------- */
+.audiobook-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 12px 0 24px;
+}
+.audiobook-cover-large {
+  width: min(50vw, 200px);
+  aspect-ratio: 1;
+  border-radius: 20px;
+  background: var(--accent-grad);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+  margin-bottom: 8px;
+}
+.audiobook-cover-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.audiobook-author {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.audiobook-hero .progress-bar {
+  width: 100%;
+  max-width: 320px;
+}
+.audiobook-progress-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 320px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.audiobook-duration-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 320px;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  margin-bottom: 16px;
+}
+.audiobook-completed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4ade80;
+  font-size: 13px;
+  font-weight: 700;
+}
+.audiobook-hero .btn {
+  max-width: 320px;
+}
+
+.chapter-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+.chapter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  width: 100%;
+}
+.chapter-row:active {
+  background: var(--surface);
+}
+.chapter-row.playing {
+  background: rgba(124, 92, 255, 0.12);
+}
+.chapter-status {
+  width: 26px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.chapter-row.playing .chapter-status {
+  color: var(--accent);
+}
+.chapter-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chapter-row.playing .chapter-title {
+  color: var(--accent);
+}
+.chapter-dur {
+  font-size: 13px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Full player: audiobook chapter position ---------- */
+.chapter-position {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+/* Shared navigation and tablet layouts. */
+:root { --nav-h: 68px; }
+.app > .section-switcher { flex: 0 0 auto; height: calc(var(--nav-h) + var(--safe-top)); margin: 0; padding: calc(var(--safe-top) + 10px) 16px 10px; position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border); border-radius: 0; }
+.app > .home-screen, .app > .playlist-screen { height: calc(100dvh - var(--nav-h) - var(--safe-top)); padding-top: 16px; }
+.app > .screen { padding-top: 16px; }
+.full-player { overflow-y: auto; }
+.full-art { max-height: 40dvh; width: min(78vw, 360px, 40dvh); flex-shrink: 0; }
+.full-top, .full-meta, .seek, .transport, .volume-row { flex-shrink: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.playback-error { padding: 12px 16px; background: var(--bg-elev-2); color: var(--danger); }
+::selection { color: var(--text); background: var(--accent); }
+@media (min-width: 768px) {
+  :root { --mini-h: 112px; }
+  .app, .mini-player { max-width: 1200px; }
+  .home-screen, .playlist-screen, .screen { padding-left: 32px; padding-right: 32px; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-content: start; }
+  .mini-inner { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) auto; align-items: center; gap: 24px; }
+  .mini-main, .mini-seek, .mini-controls { min-width: 0; margin: 0; }
+  .mini-controls { gap: 4px; }
+  .mini-controls .ctrl { width: 40px; height: 44px; }
+  .mini-controls .play-toggle { width: 48px; height: 48px; }
+  .track-item { min-height: 68px; }
+  .track-item .drag-handle, .track-item .row-btn, .track-item .index { min-width: 44px; min-height: 44px; }
+  .full-player { max-width: 1200px; padding-left: 48px; padding-right: 48px; }
+}
+@media (min-width: 768px) and (orientation: landscape) {
+  .full-player { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr auto auto auto; column-gap: 48px; align-items: center; }
+  .full-top { grid-column: 1 / -1; }
+  .full-art-wrap { grid-column: 1; grid-row: 2 / 6; }
+  .full-art { width: min(36vw, 440px, 65dvh); max-height: 65dvh; }
+  .full-meta, .seek, .transport, .volume-row { grid-column: 2; min-width: 0; }
+  .full-meta { align-self: end; }
+}
+@media (pointer: coarse) {
+  .icon-btn, .row-btn, .drag-handle { min-height: 44px; min-width: 44px; }
+  input[type='range'] { height: 12px; }
+  input[type='range']::-webkit-slider-thumb { width: 24px; height: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

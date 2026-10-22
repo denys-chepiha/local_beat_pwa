@@ -37,16 +37,36 @@ HTMLAudioElement · Media Session API · File API
 ## Develop
 
 ```bash
-npm install
-npm run dev      # local dev server
-npm run build    # production build -> dist/
-npm run preview  # serve the production build
+pnpm install
+pnpm dev      # local dev server
+pnpm build    # production build -> dist/
+pnpm preview  # serve the production build
 ```
 
 ## Deploy (Vercel)
 
 The repo includes `vercel.json`. Import the project in Vercel (or run `vercel`) — it
-builds with `npm run build` and serves `dist/`.
+builds with `pnpm build` and serves `dist/`.
+
+## Video and tablets
+
+The shared Music / Audio Books / Video menu is available throughout the app. Add multiple local videos to a persistent playlist, including files from external drives visible in the system picker. Files are saved locally in IndexedDB and never uploaded. The playlist, active video, playback position and watched markers survive navigation and reloads. Saving requires enough device storage; errors are shown in the player. Clearing site data removes these copies.
+
+Video controls include play/pause, previous/next, automatic advance, repeat, timeline, ±10 seconds, speed, mute, touch volume and a bottom-right fullscreen button. Hold the timeline for one second to see a frame preview; release to seek. Completed videos are marked in the playlist. Fullscreen keeps these controls and the playlist available. During playback controls disappear after 2.5 seconds; move the mouse, tap the picture or use the keyboard to reveal them. The first reveal tap does not pause playback. A full-window fallback is available when native fullscreen is unavailable. On iOS, volume uses Web Audio when supported; a recovery message advises device buttons if unavailable. Native Safari video fullscreen is used when container fullscreen is unavailable.
+
+Keyboard when the video stage has focus: Space/K play or pause, Left/Right seek ten seconds, F fullscreen, M mute, Escape exits fullscreen. Music reorder handles also support Up/Down; Escape or pointer cancellation cancels a drag.
+
+Tablet layouts adapt to portrait and landscape; the full audio player uses two columns in landscape. Browser codecs determine which video files play. H.264/AAC MP4 is a useful compatibility choice; unsupported files display a recovery message.
+
+## Verification
+
+```bash
+pnpm test
+pnpm build
+pnpm audit
+```
+
+Review findings and device checks: docs/review-2026-10-22.md.
 
 ## iPhone / Safari notes
 

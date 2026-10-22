@@ -1,5 +1,5 @@
 // Core
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 // Components
 import {
   PlayIcon,
@@ -12,10 +12,11 @@ import {
   ChevronDownIcon,
   MusicIcon,
   VolumeIcon,
+  Rewind10Icon,
+  Forward10Icon,
 } from '@/components/Icons'
 // Store
 import { usePlayerStore } from '@/store/usePlayerStore'
-import { useLibraryStore } from '@/store/useLibraryStore'
 import { useUiStore } from '@/store/useUiStore'
 // Utils
 import { formatTime } from '@/utils/format'
@@ -23,8 +24,7 @@ import { formatTime } from '@/utils/format'
 export default function FullPlayer() {
   const player = usePlayerStore()
   const {
-    currentTrackId,
-    currentPlaylistId,
+    nowPlaying,
     isPlaying,
     currentTime,
     duration,
@@ -32,16 +32,11 @@ export default function FullPlayer() {
     shuffleEnabled,
     repeatMode,
     coverUrl,
+    source,
   } = player
-  const track = useLibraryStore((s) => (currentTrackId ? s.getTrack(currentTrackId) : undefined))
-  const playlist = useLibraryStore((s) =>
-    currentPlaylistId ? s.getPlaylist(currentPlaylistId) : undefined,
-  )
   const closeFullPlayer = useUiStore((s) => s.closeFullPlayer)
 
-  // Local seek state so dragging the slider feels smooth.
-  const [seeking, setSeeking] = useState<number | null>(null)
-  const shownTime = seeking ?? currentTime
+  const shownTime = currentTime
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,9 +46,10 @@ export default function FullPlayer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [closeFullPlayer])
 
-  if (!track) return null
+  if (!nowPlaying) return null
 
-  const supportsVolume = !/iPhone|iPad|iPod/.test(navigator.userAgent)
+  const isAudiobook = source === 'audiobook'
+  const supportsVolume = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
 
   return (
     <div className="full-player">
@@ -61,7 +57,7 @@ export default function FullPlayer() {
         <button className="icon-btn ghost" onClick={closeFullPlayer} aria-label="Close player">
           <ChevronDownIcon />
         </button>
-        <div className="label">{playlist ? playlist.name : 'Now Playing'}</div>
+        <div className="label">{nowPlaying.label}</div>
         <span style={{ width: 42 }} />
       </div>
 
@@ -72,41 +68,46 @@ export default function FullPlayer() {
       </div>
 
       <div className="full-meta">
-        <div className="title">{track.title}</div>
-        <div className="artist">{track.artist}</div>
+        <div className="title">{nowPlaying.title}</div>
+        <div className="artist">{nowPlaying.subtitle}</div>
+        {nowPlaying.chapterPosition && (
+          <div className="chapter-position">
+            Chapter {nowPlaying.chapterPosition.index + 1} of {nowPlaying.chapterPosition.count}
+          </div>
+        )}
       </div>
 
       <div className="seek">
         <input
           type="range"
           min={0}
-          max={duration || track.duration || 0}
+          max={duration || 0}
           step={0.1}
-          value={Math.min(shownTime, duration || track.duration || 0)}
-          onChange={(e) => setSeeking(Number(e.target.value))}
-          onMouseUp={(e) => {
-            player.seek(Number((e.target as HTMLInputElement).value))
-            setSeeking(null)
-          }}
-          onTouchEnd={(e) => {
-            player.seek(Number((e.target as HTMLInputElement).value))
-            setSeeking(null)
-          }}
+          value={Math.min(shownTime, duration || 0)}
+          aria-label="Seek track"
+          disabled={duration <= 0 || player.isLoading || player.canResume}
+          onChange={(e) => player.seek(Number(e.target.value))}
         />
         <div className="times">
           <span>{formatTime(shownTime)}</span>
-          <span>{formatTime(duration || track.duration)}</span>
+          <span>{formatTime(duration)}</span>
         </div>
       </div>
 
       <div className="transport">
-        <button
-          className={`side${shuffleEnabled ? ' active' : ''}`}
-          onClick={player.toggleShuffle}
-          aria-label="Shuffle"
-        >
-          <ShuffleIcon width={22} height={22} />
-        </button>
+        {isAudiobook ? (
+          <button className="side" onClick={() => player.seek(currentTime - 30)} aria-label="Back 30 seconds">
+            <Rewind10Icon width={22} height={22} />
+          </button>
+        ) : (
+          <button
+            className={`side${shuffleEnabled ? ' active' : ''}`}
+            onClick={player.toggleShuffle}
+            aria-label="Shuffle"
+          >
+            <ShuffleIcon width={22} height={22} />
+          </button>
+        )}
         <button className="nav" onClick={() => void player.previous()} aria-label="Previous">
           <PrevIcon width={34} height={34} />
         </button>
@@ -116,17 +117,23 @@ export default function FullPlayer() {
         <button className="nav" onClick={() => void player.next()} aria-label="Next">
           <NextIcon width={34} height={34} />
         </button>
-        <button
-          className={`side${repeatMode !== 'off' ? ' active' : ''}`}
-          onClick={player.cycleRepeat}
-          aria-label="Repeat"
-        >
-          {repeatMode === 'one' ? (
-            <RepeatOneIcon width={22} height={22} />
-          ) : (
-            <RepeatIcon width={22} height={22} />
-          )}
-        </button>
+        {isAudiobook ? (
+          <button className="side" onClick={() => player.seek(currentTime + 30)} aria-label="Forward 30 seconds">
+            <Forward10Icon width={22} height={22} />
+          </button>
+        ) : (
+          <button
+            className={`side${repeatMode !== 'off' ? ' active' : ''}`}
+            onClick={player.cycleRepeat}
+            aria-label="Repeat"
+          >
+            {repeatMode === 'one' ? (
+              <RepeatOneIcon width={22} height={22} />
+            ) : (
+              <RepeatIcon width={22} height={22} />
+            )}
+          </button>
+        )}
       </div>
 
       {supportsVolume && (

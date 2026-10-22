@@ -170,3 +170,58 @@ export const FolderPlusIcon = (p: IconProps) => (
     <path d="M12 10v6M9 13h6" />
   </svg>
 )
+
+export const BookIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+  </svg>
+)
+
+export const MoreIcon = (p: IconProps) => (
+  <svg {...base(p)} fill="currentColor" stroke="none">
+    <circle cx="12" cy="5" r="2" />
+    <circle cx="12" cy="12" r="2" />
+    <circle cx="12" cy="19" r="2" />
+  </svg>
+)
+
+export const CheckIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m20 6-11 11-5-5" />
+  </svg>
+)
+
+export const CheckCircleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M21.8 10A10 10 0 1 1 17 3.34" />
+    <path d="m9 11 3 3L22 4" />
+  </svg>
+)
+
+export const ImageIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="9" cy="9" r="2" />
+    <path d="m21 15-5-5L5 21" />
+  </svg>
+)
+
+export const XIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+)
+
+export const GripHorizontalIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="9" cy="8" r="1" fill="currentColor" />
+    <circle cx="15" cy="8" r="1" fill="currentColor" />
+    <circle cx="9" cy="16" r="1" fill="currentColor" />
+    <circle cx="15" cy="16" r="1" fill="currentColor" />
+  </svg>
+)
+
+export function VideoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></svg>
+}

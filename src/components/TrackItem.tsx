@@ -1,8 +1,10 @@
 // Core
 import { useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 // Components
 import { TrashIcon, PlayIcon, PauseIcon, DragIcon, EditIcon } from '@/components/Icons'
+// Services
+import { usePlayerStore } from '@/store/usePlayerStore'
 // Types
 import type { Track } from '@/types'
 // Utils
@@ -16,7 +18,9 @@ interface Props {
   isDragging: boolean
   editing: boolean
   /** Remaining seconds for the currently playing track (countdown). */
-  remaining: number | null
+  style?: CSSProperties
+  onDragCancel: () => void
+  onReorderKey: (e: KeyboardEvent) => void
   registerRef: (el: HTMLDivElement | null) => void
   onPlay: () => void
   onRemove: () => void
@@ -33,7 +37,9 @@ export default function TrackItem({
   isPlaying,
   isDragging,
   editing,
-  remaining,
+  style,
+  onDragCancel,
+  onReorderKey,
   registerRef,
   onPlay,
   onRemove,
@@ -44,21 +50,23 @@ export default function TrackItem({
 }: Props) {
   const [confirming, setConfirming] = useState(false)
 
-  const timeLabel =
-    isCurrent && remaining != null ? `-${formatTime(remaining)}` : formatTime(track.duration)
 
   return (
     <div
       ref={registerRef}
+      style={style}
       className={`track-item${isCurrent ? ' playing' : ''}${isDragging ? ' dragging' : ''}`}
     >
       <button
         className="drag-handle"
-        aria-label="Reorder track"
+        aria-label={`Reorder ${track.title}`}
+        title="Drag to reorder, or use arrow keys"
+        onKeyDown={onReorderKey}
         onPointerDown={onDragStart}
         onPointerMove={onDragMove}
         onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
+        onPointerCancel={onDragCancel}
+        onLostPointerCapture={onDragCancel}
       >
         <DragIcon width={20} height={20} />
       </button>
@@ -100,7 +108,12 @@ export default function TrackItem({
           </button>
         </>
       )}
-      <span className={`dur${isCurrent && remaining != null ? ' remaining' : ''}`}>{timeLabel}</span>
+      {isCurrent ? <RemainingTime /> : <span className="dur">{formatTime(track.duration)}</span>}
     </div>
   )
+}
+
+function RemainingTime() {
+  const seconds = usePlayerStore((s) => Math.ceil(Math.max(0, s.duration - s.currentTime)))
+  return <span className="dur remaining">-{formatTime(seconds)}</span>
 }

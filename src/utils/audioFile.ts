@@ -1,7 +1,5 @@
-// Core
-import jsmediatags from 'jsmediatags'
-
 const SUPPORTED_EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac', 'oga', 'opus']
+const METADATA_TIMEOUT_MS = 8000
 
 export interface ExtractedMeta {
   title: string
@@ -25,25 +23,36 @@ export function baseName(fileName: string): string {
 }
 
 /** Read the audio duration via a throwaway HTMLAudioElement. */
-function readDuration(file: File): Promise<number> {
+export function readAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file)
     const audio = document.createElement('audio')
-    audio.preload = 'metadata'
-    const cleanup = () => {
-      URL.revokeObjectURL(url)
+    let url: string | undefined
+    let settled = false
+    const finish = (duration: number) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      audio.onloadedmetadata = null
+      audio.onerror = null
+      if (url) URL.revokeObjectURL(url)
       audio.removeAttribute('src')
+      resolve(duration)
+      // Release the media resource even when a mobile decoder has stalled.
+      audio.load()
     }
-    audio.onloadedmetadata = () => {
-      const d = Number.isFinite(audio.duration) ? audio.duration : 0
-      cleanup()
-      resolve(d)
+    // Metadata is optional: mobile browsers/providers may never emit either
+    // event, and that must not prevent the file from being saved.
+    const timer = setTimeout(() => finish(0), METADATA_TIMEOUT_MS)
+    try {
+      url = URL.createObjectURL(file)
+      audio.preload = 'metadata'
+      audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? audio.duration : 0)
+      audio.onerror = () => finish(0)
+      audio.src = url
+      audio.load()
+    } catch {
+      finish(0)
     }
-    audio.onerror = () => {
-      cleanup()
-      resolve(0)
-    }
-    audio.src = url
   })
 }
 
@@ -80,36 +89,54 @@ function fixCyrillic(value: string): string {
 
 /** Trim a tag value and run Cyrillic recovery, returning undefined when empty. */
 function cleanTag(value?: string): string | undefined {
-  if (!value) return undefined
+  if (typeof value !== 'string' || !value) return undefined
   const fixed = fixCyrillic(value).trim()
   return fixed || undefined
 }
 
 /** Read ID3 / tag metadata (title, artist, album, cover art). */
-function readTags(file: File): Promise<Partial<ExtractedMeta>> {
+async function readTags(file: File): Promise<Partial<ExtractedMeta>> {
+  const { default: jsmediatags } = await import('jsmediatags')
   return new Promise((resolve) => {
-    jsmediatags.read(file, {
-      onSuccess: ({ tags }) => {
-        let cover: Blob | undefined
-        if (tags.picture) {
-          const { data, format } = tags.picture
-          cover = new Blob([new Uint8Array(data)], { type: format || 'image/jpeg' })
-        }
-        resolve({
-          title: cleanTag(tags.title),
-          artist: cleanTag(tags.artist),
-          album: cleanTag(tags.album),
-          cover,
-        })
-      },
-      onError: () => resolve({}),
-    })
+    let settled = false
+    const finish = (tags: Partial<ExtractedMeta>) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(tags)
+    }
+    const timer = setTimeout(() => finish({}), METADATA_TIMEOUT_MS)
+    try {
+      jsmediatags.read(file, {
+        onSuccess: ({ tags }) => {
+          if (settled) return
+          try {
+            let cover: Blob | undefined
+            if (tags.picture) {
+              const { data, format } = tags.picture
+              cover = new Blob([new Uint8Array(data)], { type: format || 'image/jpeg' })
+            }
+            finish({
+              title: cleanTag(tags.title),
+              artist: cleanTag(tags.artist),
+              album: cleanTag(tags.album),
+              cover,
+            })
+          } catch {
+            finish({})
+          }
+        },
+        onError: () => finish({}),
+      })
+    } catch {
+      finish({})
+    }
   })
 }
 
 /** Combine tag + duration metadata with sensible fallbacks. */
 export async function extractMetadata(file: File): Promise<ExtractedMeta> {
-  const [duration, tags] = await Promise.all([readDuration(file), readTags(file)])
+  const [duration, tags] = await Promise.all([readAudioDuration(file), readTags(file)])
   return {
     title: tags.title || baseName(file.name),
     artist: tags.artist || 'Unknown Artist',

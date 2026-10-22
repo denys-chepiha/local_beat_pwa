@@ -14,7 +14,7 @@ export default function HomeScreen() {
   const createPlaylist = useLibraryStore((s) => s.createPlaylist)
   const deletePlaylist = useLibraryStore((s) => s.deletePlaylist)
   const { openPlaylist, openSettings, showToast } = useUiStore()
-  const currentTrackId = usePlayerStore((s) => s.currentTrackId)
+  const nowPlaying = usePlayerStore((s) => s.nowPlaying)
   const handleTrackRemoved = usePlayerStore((s) => s.handleTrackRemoved)
   const [creating, setCreating] = useState(false)
 
@@ -30,7 +30,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <div className={`home-screen${currentTrackId ? ' has-mini' : ''}`}>
+    <div className={`home-screen${nowPlaying ? ' has-mini' : ''}`}>
       <header className="home-header topbar">
         <div className="brand">
           <img className="brand-logo" src="/icons/logo.png" alt="Local Beat" />
@@ -43,6 +43,7 @@ export default function HomeScreen() {
           <SettingsIcon />
         </button>
       </header>
+
 
       <section className="home-playlists" aria-labelledby="home-playlists-title">
         <div className="section-title" id="home-playlists-title">

@@ -105,65 +105,69 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }
 
     set({ importProgress: { done: 0, total: audioFiles.length } })
-    const newTracks: Track[] = []
-    const newBlobs: TrackBlob[] = []
+    try {
+      const newTracks: Track[] = []
+      const newBlobs: TrackBlob[] = []
 
-    for (let i = 0; i < audioFiles.length; i++) {
-      const file = audioFiles[i]
-      try {
-        const meta = await extractMetadata(file)
-        const id = uid()
-        newTracks.push({
-          id,
-          playlistId,
-          title: meta.title,
-          artist: meta.artist,
-          album: meta.album,
-          duration: meta.duration,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || 'audio/mpeg',
-          hasCover: !!meta.cover,
-          createdAt: Date.now(),
-        })
-        newBlobs.push({ id, blob: file, cover: meta.cover })
-        result.added++
-      } catch {
-        result.skipped.push(file.name)
-      }
-      set({ importProgress: { done: i + 1, total: audioFiles.length } })
-    }
-
-    if (newTracks.length > 0) {
-      const updatedAt = Date.now()
-      const ids = newTracks.map((t) => t.id)
-      await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
-        await db.tracks.bulkAdd(newTracks)
-        await db.blobs.bulkAdd(newBlobs)
-        const playlist = await db.playlists.get(playlistId)
-        if (playlist) {
-          await db.playlists.update(playlistId, {
-            trackIds: [...ids, ...playlist.trackIds],
-            updatedAt,
+      for (let i = 0; i < audioFiles.length; i++) {
+        const file = audioFiles[i]
+        try {
+          const meta = await extractMetadata(file)
+          const id = uid()
+          newTracks.push({
+            id,
+            playlistId,
+            title: meta.title,
+            artist: meta.artist,
+            album: meta.album,
+            duration: meta.duration,
+            fileName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || 'audio/mpeg',
+            hasCover: !!meta.cover,
+            createdAt: Date.now(),
           })
+          newBlobs.push({ id, blob: file, cover: meta.cover })
+          result.added++
+        } catch {
+          result.skipped.push(file.name)
         }
-      })
-      set((s) => {
-        const tracks = { ...s.tracks }
-        for (const t of newTracks) tracks[t.id] = t
-        return {
-          tracks,
-          playlists: s.playlists.map((p) =>
-            p.id === playlistId
-              ? { ...p, trackIds: [...ids, ...p.trackIds], updatedAt }
-              : p,
-          ),
-        }
-      })
-    }
+        set({ importProgress: { done: i + 1, total: audioFiles.length } })
+      }
 
-    set({ importProgress: null })
-    return result
+      if (newTracks.length > 0) {
+        const updatedAt = Date.now()
+        const ids = newTracks.map((t) => t.id)
+        await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
+          const playlist = await db.playlists.get(playlistId)
+          if (!playlist) throw new Error('Playlist was deleted during import')
+          await db.tracks.bulkAdd(newTracks)
+          await db.blobs.bulkAdd(newBlobs)
+          if (playlist) {
+            await db.playlists.update(playlistId, {
+              trackIds: [...ids, ...playlist.trackIds],
+              updatedAt,
+            })
+          }
+        })
+        set((s) => {
+          const tracks = { ...s.tracks }
+          for (const t of newTracks) tracks[t.id] = t
+          return {
+            tracks,
+            playlists: s.playlists.map((p) =>
+              p.id === playlistId
+                ? { ...p, trackIds: [...ids, ...p.trackIds], updatedAt }
+                : p,
+            ),
+          }
+        })
+      }
+
+      return result
+    } finally {
+      set({ importProgress: null })
+    }
   },
 
   async removeTrack(playlistId, trackId) {
