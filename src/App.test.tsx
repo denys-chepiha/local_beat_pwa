@@ -1,6 +1,6 @@
 // Core
 import { StrictMode } from 'react'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 // Components
 import App from './App'
@@ -23,7 +23,7 @@ it('shares startup in StrictMode and waits for restored player state before show
   expect(screen.getByText('Loading your library…')).toBeInTheDocument()
   expect(loadMusic).toHaveBeenCalledTimes(1)
   expect(loadBooks).toHaveBeenCalledTimes(1)
-  expect(init).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
   await act(async () => finish())
   expect(screen.getByRole('button', { name: 'New Playlist' })).toBeInTheDocument()
 })

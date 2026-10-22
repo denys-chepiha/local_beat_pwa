@@ -6,6 +6,7 @@ import ChepioTechFooter from '@/components/ChepioTechFooter/ChepioTechFooter'
 import MiniPlayer from '@/components/MiniPlayer'
 import FullPlayer from '@/components/FullPlayer'
 // Screens
+import { useVideoSession } from '@/screens/VideoScreen/useVideoSession'
 import VideoScreen from '@/screens/VideoScreen/VideoScreen'
 import HomeScreen from '@/screens/HomeScreen'
 import PlaylistScreen from '@/screens/PlaylistScreen'
@@ -36,7 +37,7 @@ export default function App() {
   // Load both libraries first, then restore the player session (which may
   // point at either a music track or an audiobook chapter).
   useEffect(() => {
-    startup ??= Promise.all([loadAll(), loadAudiobooks()]).then(() => initPlayer())
+    startup ??= Promise.all([loadAll(), loadAudiobooks(), useVideoSession.getState().hydrate()]).then(() => initPlayer())
     void startup.catch(() => setStartupError(true))
   }, [loadAll, loadAudiobooks, initPlayer])
 

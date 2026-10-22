@@ -97,3 +97,53 @@ it('keeps the session playlist across navigation while releasing decoder URLs', 
   const second = render(<VideoScreen />)
   expect(second.container.querySelector('video')?.src).toBe('blob:retained.mp4')
 })
+
+it('restores video position and marks completed files', () => {
+  const first = render(<VideoScreen />)
+  choose('resume.mp4', 'next.mp4')
+  const video = first.container.querySelector('video')!
+  metadata(video)
+  video.currentTime = 42
+  fireEvent.timeUpdate(video)
+  first.unmount()
+  const second = render(<VideoScreen />)
+  const restored = second.container.querySelector('video')!
+  metadata(restored)
+  expect(restored.currentTime).toBe(42)
+  fireEvent.ended(restored)
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  expect(screen.getByText('✓ Watched')).toBeInTheDocument()
+})
+
+it('keeps volume controls on the right and indicates zero volume as muted', () => {
+  const { container } = render(<VideoScreen />)
+  choose('volume.mp4')
+  const group = container.querySelector('.video-right-controls')!
+  expect(group.lastElementChild).toHaveAttribute('aria-label', 'Enter fullscreen')
+  const slider = screen.getByRole('slider', { name: 'Video volume' })
+  fireEvent.change(slider, { target: { value: 0 } })
+  expect(screen.getByRole('button', { name: 'Unmute video' })).toHaveClass('video-control--muted')
+  expect(container.querySelector('video')!.muted).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Unmute video' }))
+  expect(container.querySelector('video')!.volume).toBe(1)
+  expect(container.querySelector('video')!.muted).toBe(false)
+})
+
+it('shows preview only after holding for one second and commits on release', () => {
+  vi.useFakeTimers()
+  const { container } = render(<VideoScreen />)
+  choose('preview.mp4')
+  const video = container.querySelector('video')!
+  metadata(video)
+  const slider = screen.getByRole('slider', { name: 'Seek video' })
+  fireEvent.pointerDown(slider)
+  fireEvent.change(slider, { target: { value: 65 } })
+  act(() => vi.advanceTimersByTime(999))
+  expect(screen.queryByLabelText('Video preview')).toBeNull()
+  expect(video.currentTime).toBe(0)
+  act(() => vi.advanceTimersByTime(1))
+  expect(screen.getByLabelText('Video preview')).toBeInTheDocument()
+  fireEvent.pointerUp(slider)
+  expect(video.currentTime).toBe(65)
+  expect(screen.queryByLabelText('Video preview')).toBeNull()
+})

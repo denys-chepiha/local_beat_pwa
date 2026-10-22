@@ -105,6 +105,7 @@ interface PlayerStore {
   bookQueue: string[]
   bookQueueIndex: number
 
+  restoreSource: (source: PlaybackSource) => Promise<void>
   init: () => Promise<void>
   playPlaylist: (playlistId: string, startTrackId?: string) => Promise<void>
   playRandom: (trackIds: string[], playlistId?: string | null) => Promise<void>
@@ -651,6 +652,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         })()
       }
       return initialization
+    },
+
+    async restoreSource(source) {
+      const s = get()
+      if (s.source === source) return
+      if (source === 'music' && s.currentTrackId) {
+        await loadMusicItem(s.currentTrackId, false, s.musicCurrentTime)
+      } else if (source === 'audiobook' && s.currentBookId) {
+        const book = useAudiobookStore.getState().getBook(s.currentBookId)
+        if (book) await loadChapterAtIndex(book.id, book.currentChapterIndex, false, book.currentTime)
+      }
     },
 
     async playPlaylist(playlistId, startTrackId) {

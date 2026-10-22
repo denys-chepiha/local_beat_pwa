@@ -1,5 +1,6 @@
 // Core
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export type AppSection = 'music' | 'audiobooks' | 'video'
 
@@ -22,6 +23,8 @@ const SECTION_BY_SCREEN: Record<Screen['name'], AppSection> = {
 
 interface UiState {
   screen: Screen
+  lastScreens: Partial<Record<AppSection, Screen>>
+  switchSection: (section: AppSection) => void
   fullPlayerOpen: boolean
   toast: string | null
   openVideo: () => void
@@ -37,8 +40,16 @@ interface UiState {
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-export const useUiStore = create<UiState>((set) => ({
+export const useUiStore = create<UiState>()(persist((set, get) => ({
   screen: { name: 'home' },
+  lastScreens: {},
+  switchSection: (section) => {
+    const s = get()
+    if (sectionOfScreen(s.screen) === section) return
+    const lastScreens = { ...s.lastScreens, [sectionOfScreen(s.screen)]: s.screen }
+    const fallback: Screen = section === 'video' ? { name: 'video' } : section === 'music' ? { name: 'home' } : { name: 'audiobooks' }
+    set({ lastScreens, screen: lastScreens[section] ?? fallback, fullPlayerOpen: false })
+  },
   fullPlayerOpen: false,
   toast: null,
   openVideo: () => set({ screen: { name: 'video' }, fullPlayerOpen: false }),
@@ -54,7 +65,7 @@ export const useUiStore = create<UiState>((set) => ({
     if (toastTimer) clearTimeout(toastTimer)
     toastTimer = setTimeout(() => set({ toast: null }), 3200)
   },
-}))
+}), { name: 'local-beat-navigation', partialize: (s) => ({ screen: s.screen, lastScreens: s.lastScreens }) }))
 
 /** Which top-level section (Music / Audio Books) a screen belongs to. */
 export function sectionOfScreen(screen: Screen): AppSection {

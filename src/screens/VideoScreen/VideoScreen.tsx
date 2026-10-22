@@ -7,12 +7,12 @@ import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
 import { useVideoSession } from './useVideoSession'
 // Utils
-import { formatTime } from '@/utils/format'
+import VideoSeek from './VideoSeek'
 // Styles
 import './VideoScreen.css'
 
 export default function VideoScreen() {
-  const { entries, setEntries, activeId, setActiveId } = useVideoSession()
+  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, storageError } = useVideoSession()
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
@@ -25,6 +25,9 @@ export default function VideoScreen() {
   const [queueOpen, setQueueOpen] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [activity, setActivity] = useState(0)
+  const [scrubbing, setScrubbing] = useState(false)
+  const audioGraph = useRef<{ context: AudioContext; gain: GainNode } | null>(null)
+  const lastVolume = useRef(1)
   const [controlsFocused, setControlsFocused] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -38,12 +41,12 @@ export default function VideoScreen() {
   const supportsVolume = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
   const wake = () => { setControlsVisible(true); setActivity((n) => n + 1) }
 
-  useEffect(() => { pauseAudio() }, [pauseAudio])
+  useEffect(() => { pauseAudio(); return () => { if (audioGraph.current) { void audioGraph.current.context.close(); audioGraph.current = null } } }, [pauseAudio])
   useEffect(() => {
-    if (!playing || queueOpen || controlsFocused) { setControlsVisible(true); return }
+    if (!playing || queueOpen || controlsFocused || scrubbing) { setControlsVisible(true); return }
     const timer = setTimeout(() => setControlsVisible(false), 2500)
     return () => clearTimeout(timer)
-  }, [playing, queueOpen, controlsFocused, activity])
+  }, [playing, queueOpen, controlsFocused, activity, scrubbing])
   useEffect(() => {
     const changed = () => { setExpanded(!!document.fullscreenElement); wake() }
     document.addEventListener('fullscreenchange', changed)
@@ -60,11 +63,12 @@ export default function VideoScreen() {
   useEffect(() => {
     const video = videoRef.current
     if (!file || !video) return
-    setTime(0); setDuration(0); setPlaying(false); setError(null); wake()
+    setTime(useVideoSession.getState().progress[activeId!]?.time ?? 0); setDuration(0); setPlaying(false); setError(null); wake()
     const url = URL.createObjectURL(file)
     video.src = url
     video.load()
     return () => {
+      if (video.readyState >= 1 && activeId !== null) saveProgress(activeId, video.currentTime, video.ended)
       video.pause()
       video.removeAttribute('src')
       video.load()
@@ -72,6 +76,31 @@ export default function VideoScreen() {
     }
   }, [file])
 
+  const changeVolume = (value: number) => {
+    const video = videoRef.current
+    if (!video) return
+    if (value > 0) lastVolume.current = value
+    setVolume(value); setMuted(value === 0)
+    if (supportsVolume) video.volume = value
+    else {
+      try {
+        if (!audioGraph.current) {
+          const context = new AudioContext()
+          const gain = context.createGain()
+          context.createMediaElementSource(video).connect(gain).connect(context.destination)
+          audioGraph.current = { context, gain }
+        }
+        audioGraph.current.gain.gain.value = value
+        void audioGraph.current.context.resume().catch(() => setError('Volume control is unavailable. Use the device volume buttons.'))
+      } catch { setError('Volume control is unavailable. Use the device volume buttons.') }
+    }
+    wake()
+  }
+  const toggleMute = () => {
+    if (muted || volume === 0) { changeVolume(volume || lastVolume.current); setMuted(false) }
+    else setMuted(true)
+    wake()
+  }
   const handoff = () => {
     pauseAudio()
     if ('mediaSession' in navigator) {
@@ -85,6 +114,7 @@ export default function VideoScreen() {
   const play = () => {
     const video = videoRef.current
     if (!video) return
+    if (audioGraph.current) void audioGraph.current.context.resume()
     void video.play().catch(() => { setPlaying(false); setError('Playback could not start. Press Play, or try another video format.') })
   }
   const togglePlay = () => {
@@ -115,6 +145,10 @@ export default function VideoScreen() {
     const stage = stageRef.current
     if (stage?.requestFullscreen) {
       try { await stage.requestFullscreen(); setExpanded(true); return } catch { /* Use a full-window player when Safari denies fullscreen. */ }
+    }
+    const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null
+    if (video?.webkitEnterFullscreen) {
+      try { video.webkitEnterFullscreen(); return } catch { /* Full-window fallback. */ }
     }
     setExpanded(true)
   }
@@ -147,7 +181,7 @@ export default function VideoScreen() {
           if (event.key === 'ArrowRight') { event.preventDefault(); seek(time + 10) }
           if (event.key === 'ArrowLeft') { event.preventDefault(); seek(time - 10) }
           if (event.key === 'f') { event.preventDefault(); void fullscreen() }
-          if (event.key === 'm') setMuted((value) => !value)
+          if (event.key === 'm') toggleMute()
         }}>
         <input ref={inputRef} type="file" hidden multiple aria-label="Choose video files"
           accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi"
@@ -157,7 +191,7 @@ export default function VideoScreen() {
             if (!selected.length) return
             const valid = selected.filter((f) => f.size > 0 && (f.type.startsWith('video/') || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(f.name)))
             const additions = valid.filter((f) => !entries.some((entry) => entry.file.name === f.name && entry.file.size === f.size && entry.file.lastModified === f.lastModified))
-              .map((f) => ({ id: ++nextId.current, file: f }))
+              .map((f) => ({ id: nextId.current = Math.max(Date.now(), nextId.current + 1), file: f }))
             setEntries((current) => [...current, ...additions])
             if (!file && additions[0]) { autoplay.current = false; setActiveId(additions[0].id) }
             setError(valid.length < selected.length ? 'Some files were skipped. Choose non-empty video files.' : null)
@@ -168,15 +202,18 @@ export default function VideoScreen() {
               onLoadedMetadata={() => {
                 const video = videoRef.current!
                 setDuration(Number.isFinite(video.duration) ? video.duration : 0)
+                const saved = useVideoSession.getState().progress[activeId!]
+                if (saved && Number.isFinite(video.duration)) { video.currentTime = saved.time >= video.duration ? 0 : Math.min(saved.time, video.duration); setTime(video.currentTime) }
                 video.playbackRate = rate
                 if (supportsVolume) video.volume = volume
                 if (autoplay.current) { autoplay.current = false; play() }
               }}
               onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
-              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+              onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
               onPlay={() => { handoff(); setPlaying(true); setError(null) }} onPause={() => setPlaying(false)}
               onEnded={() => {
                 setPlaying(false)
+                if (activeId !== null) saveProgress(activeId, duration, true)
                 if (repeat === 'one') { seek(0); play() }
                 else if (activeIndex < entries.length - 1) navigate(1)
                 else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
@@ -189,20 +226,22 @@ export default function VideoScreen() {
                 <button className="video-control" onClick={library} aria-label="Back to music"><XIcon /></button>
                 <span className="video-filename">{file.name}</span>
                 <button className="video-control" aria-expanded={queueOpen} onClick={() => { setQueueOpen(!queueOpen); wake() }}>Playlist ({entries.length})</button>
-                <button className="video-control" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}>{expanded ? 'Exit fullscreen' : 'Fullscreen'}</button>
               </div>
               <div className="video-bottom-controls">
-                <div className="video-timeline"><span>{formatTime(time)}</span><input aria-label="Seek video" type="range" min={0} max={duration} step={0.1} value={Math.min(time, duration)} disabled={duration <= 0} onChange={(e) => seek(Number(e.target.value))} /><span>{formatTime(duration)}</span></div>
+                <VideoSeek key={activeId} file={file} time={time} duration={duration} seek={seek} onScrubbing={setScrubbing} />
                 <div className="video-transport">
                   <button className="video-control" onClick={() => navigate(-1)} disabled={activeIndex <= 0} aria-label="Previous video"><PrevIcon /></button>
                   <button className="video-control" onClick={() => seek(time - 10)} aria-label="Rewind video 10 seconds"><Rewind10Icon /></button>
                   <button className="video-control video-control--play" onClick={togglePlay} aria-label={playing ? 'Pause video' : 'Play video'}>{playing ? <PauseIcon /> : <PlayIcon />}</button>
                   <button className="video-control" onClick={() => seek(time + 10)} aria-label="Forward video 10 seconds"><Forward10Icon /></button>
                   <button className="video-control" onClick={() => navigate(1)} disabled={activeIndex >= entries.length - 1} aria-label="Next video"><NextIcon /></button>
-                  <button className="video-control" aria-label={muted ? 'Unmute video' : 'Mute video'} aria-pressed={muted} onClick={() => setMuted(!muted)}><VolumeIcon /><span>{muted ? 'Off' : ''}</span></button>
-                  {supportsVolume && <input className="video-volume" aria-label="Video volume" type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => { const v = Number(e.target.value); setVolume(v); if (videoRef.current) videoRef.current.volume = v; setMuted(v === 0) }} />}
                   <button className="video-control" aria-label={`Repeat video: ${repeat}`} aria-pressed={repeat !== 'off'} onClick={() => setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off')}>Repeat: {repeat}</button>
                   <label className="video-speed"><span className="sr-only">Playback speed</span><select aria-label="Playback speed" value={rate} onChange={(e) => { const v = Number(e.target.value); setRate(v); if (videoRef.current) videoRef.current.playbackRate = v }}>{[0.5,0.75,1,1.25,1.5,2].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}</select></label>
+                  <div className="video-right-controls">
+                    <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z M16 9l6 6m0-6-6 6" /></svg></button>
+                    <label className="video-volume-control"><VolumeIcon width={18} height={18} /><input className="video-volume" aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
+                    <button className="video-control" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={expanded ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} /></svg></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -212,12 +251,12 @@ export default function VideoScreen() {
         )}
         {queueOpen && file && <aside className="video-queue" aria-label="Video playlist"><div className="video-queue-heading"><h2>Playlist</h2><button className="video-control" onClick={() => setQueueOpen(false)} aria-label="Close playlist"><XIcon /></button></div>
           <button className="btn" onClick={() => inputRef.current?.click()}><PlusIcon /> Add videos</button>
-          <ol>{entries.map((entry, i) => <li key={entry.id} className={entry.id === activeId ? 'is-active' : ''}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
+          <ol>{entries.map((entry, i) => <li key={entry.id} className={`${entry.id === activeId ? 'is-active' : ''}${progress[entry.id]?.completed ? ' is-watched' : ''}`}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}{progress[entry.id]?.completed && <small className="video-watched-label">✓ Watched</small>}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
         </aside>}
-        {error && <p className="video-error" role="alert">{error}</p>}
+        {(error || storageError) && <p className="video-error" role="alert">{error || storageError}</p>}
       </div>
       {file && <div className="video-details"><div><h2>{file.name}</h2><p>{activeIndex + 1} of {entries.length} · {(file.size / 1024 / 1024).toFixed(1)} MB</p></div><button className="btn" onClick={() => { setQueueOpen(!queueOpen); wake() }}>Show playlist</button></div>}
-      <p className="video-note">Videos stay on your device and are not copied into the library. Your playlist stays available until you reload or close the app. During playback, controls hide automatically; move the pointer or tap the video to show them.</p>
+      <p className="video-note">Videos are saved on this device for next time. Your playlist, watched videos and playback positions are remembered. Clearing browser data removes saved videos. During playback, controls hide automatically; move the pointer or tap the video to show them.</p>
     </main>
   )
 }
