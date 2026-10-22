@@ -191,3 +191,49 @@ it('silences and suspends iOS Web Audio on pause without resuming when volume ch
     expect(gain.gain.value).toBe(0.6)
   } finally { cleanup(); vi.unstubAllGlobals() }
 })
+
+it('double taps seek on the matching half, clamp at either end and preserve playback', () => {
+  vi.useFakeTimers()
+  const { container } = render(<VideoScreen />)
+  choose('gestures.mp4')
+  const video = container.querySelector('video')!
+  metadata(video)
+  vi.spyOn(video, 'getBoundingClientRect').mockReturnValue({ left: 20, width: 400 } as DOMRect)
+  const tap = (x: number) => fireEvent.click(video, { clientX: x })
+  video.currentTime = 50
+  tap(350)
+  expect(video.currentTime).toBe(50)
+  act(() => vi.advanceTimersByTime(150))
+  tap(350)
+  expect(video.currentTime).toBe(60)
+  expect(video.paused).toBe(true)
+  tap(50); tap(50)
+  expect(video.currentTime).toBe(50)
+  video.currentTime = 4
+  tap(50); tap(50)
+  expect(video.currentTime).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+  video.currentTime = 96
+  tap(350); tap(350)
+  expect(video.currentTime).toBe(100)
+  expect(video.paused).toBe(false)
+  video.currentTime = 40
+  tap(50); tap(350)
+  expect(video.currentTime).toBe(40)
+  act(() => vi.advanceTimersByTime(400))
+  tap(350)
+  expect(video.currentTime).toBe(40)
+})
+
+it('shows a central play button on pause and hides it when playback starts', () => {
+  const { container } = render(<VideoScreen />)
+  choose('center.mp4')
+  const video = container.querySelector('video')!
+  metadata(video)
+  fireEvent.click(screen.getByRole('button', { name: 'Play video from center' }))
+  expect(video.paused).toBe(false)
+  expect(screen.queryByRole('button', { name: 'Play video from center' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Pause video' }))
+  expect(video.paused).toBe(true)
+  expect(screen.getByRole('button', { name: 'Play video from center' })).toBeVisible()
+})

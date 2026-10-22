@@ -34,6 +34,7 @@ export default function VideoScreen() {
   const inputRef = useRef<HTMLInputElement>(null)
   const nextId = useRef(Math.max(0, ...entries.map((entry) => entry.id)))
   const autoplay = useRef(false)
+  const lastTap = useRef<{ at: number; side: -1 | 1 } | null>(null)
   const pauseAudio = usePlayerStore((s) => s.pause)
   const goHome = useUiStore((s) => s.goHome)
   const activeIndex = entries.findIndex((entry) => entry.id === activeId)
@@ -74,6 +75,7 @@ export default function VideoScreen() {
     return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape) }
   }, [expanded])
   useEffect(() => {
+    lastTap.current = null
     const video = videoRef.current
     if (!file || !video) return
     setTime(useVideoSession.getState().progress[activeId!]?.time ?? 0); setDuration(0); setPlaying(false); setError(null); wake()
@@ -237,8 +239,19 @@ export default function VideoScreen() {
                 else if (activeIndex < entries.length - 1) navigate(1)
                 else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
               }}
-              onClick={() => { if (controlsVisible) togglePlay(); else wake() }}
+              onClick={(event) => {
+                const bounds = event.currentTarget.getBoundingClientRect()
+                const side = event.clientX < bounds.left + bounds.width / 2 ? -1 : 1
+                const now = performance.now()
+                const previous = lastTap.current
+                wake()
+                if (previous && previous.side === side && now - previous.at <= 350) {
+                  lastTap.current = null
+                  seek(event.currentTarget.currentTime + side * 10)
+                } else lastTap.current = { at: now, side }
+              }}
               onError={() => { silenceGraph(); setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
+            {!playing && !queueOpen && <button className="video-center-play" aria-label="Play video from center" onClick={() => { lastTap.current = null; wake(); play() }}><PlayIcon width={40} height={40} /></button>}
             <div className={`video-overlay${controlsVisible ? '' : ' video-overlay--hidden'}`}
               onFocusCapture={(event) => { wake(); if (event.target.matches(':focus-visible')) setControlsFocused(true) }} onBlurCapture={() => setControlsFocused(false)}>
               <div className="video-top-controls">

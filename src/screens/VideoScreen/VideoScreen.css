@@ -101,3 +101,23 @@
 
 .video-storage-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 16px; border: 1px solid #8b7136; border-radius: 8px; color: #ffe2a0; background: #342c1d; font-size: 14px; line-height: 1.5; }
 .video-storage-error p { flex: 1; min-width: min(240px, 100%); }
+
+.video-stage > video { touch-action: manipulation; }
+.video-center-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 1px solid #ffffff70;
+  border-radius: 50%;
+  background: #00000099;
+  color: white;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.video-center-play:focus-visible { outline: 2px solid #ffd54a; outline-offset: 4px; }
