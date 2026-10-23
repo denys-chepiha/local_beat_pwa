@@ -22,8 +22,9 @@ Dependencies: approved parsers and existing IndexedDB/PWA infrastructure. Risks:
 - [x] Implement paged/swipe/scroll, search, contents, presentation and fullscreen controls.
 - [x] Integrate ordered tabs and common progress sliders.
 - [x] Verify formats, persistence, offline behavior and responsive layouts; document device limitations.
-- [ ] Obtain commit approval and perform the configured release flow.
-- [ ] Verify installed PWA and real file persistence on physical iPad/Safari; check live headers and service-worker upgrade after release.
+- [x] Obtain commit approval and perform the configured release flow (main a071dec, Vercel production, 2026-10-23).
+- [x] Verify live security headers and production Reader/video/offline behavior; verify previous-to-current service-worker activation and saved-video preservation in an isolated local browser.
+- [ ] Verify installed PWA and real file persistence on physical iPad/Safari, including update completion on the device network.
 
 Definition of Done for implementation: `pnpm test`, `pnpm build`, `pnpm audit`, `git diff --check`; browser evidence in docs/review-2026-10-23.md. Release requires the separate approval and device checks above.
 
