@@ -1,0 +1,4 @@
+.playlist-create-form { display: flex; flex-direction: column; gap: 12px; }
+.playlist-create-form input { width: 100%; min-height: 48px; padding: 12px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; }
+.playlist-create-form > div { display: flex; justify-content: flex-end; gap: 8px; }
+.playlist-create-form p { color: var(--danger); }

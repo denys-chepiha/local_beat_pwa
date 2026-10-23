@@ -39,3 +39,17 @@ Dependencies: existing stores and tests. Risks: independent media-session progre
 - [x] Add race/recovery tests and record bundle measurements.
 
 Definition of Done: regression tests and production build pass; measurements distinguish smaller initial bundles from increased offline assets. Commands: `pnpm test`, `pnpm build`.
+
+## Reader touch experience
+Scope: requested reader controls/fullscreen/gestures/motion, loading work and inline playlist naming. Non-scope: native iOS wrapper, new formats or storage migrations.
+Dependencies: current renderers and browser APIs. Risks: iPhone fullscreen limits, pinch/scroll arbitration and canvas memory.
+
+- [x] Remove reading progress slider; use accessible icon actions and immersive fullscreen exit.
+- [x] Implement pinch, high-zoom panning and reduced-motion-aware page turns.
+- [x] Add bounded PDF reuse, per-format loading and inline playlist name entry.
+- [x] Verify tests/build, Chromium gestures and WebKit reading; record measured limits.
+- [x] Obtain commit/release approval (2026-10-23).
+- [ ] Complete production deployment and live verification.
+- [ ] Verify physical iPhone/iPad keyboard, gestures and installed fullscreen.
+
+Definition of Done: pnpm test, pnpm build, git diff --check, browser evidence in docs/review-reader-experience-2026-10-23.md.

@@ -30,3 +30,7 @@
 [data-theme="night"] .pdf-page { background: #191919; }
 [data-theme="night"] .pdf-page-status { color: #ddd; }
 [data-theme="sepia"] .pdf-page-canvas { filter: sepia(.3); }
+
+.reader-document-viewport.pdf-viewport { display: block; overflow: auto; touch-action: pan-x pan-y; }
+.pdf-pages { flex: none; }
+.pdf-page[hidden] { display: none; }

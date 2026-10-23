@@ -2,6 +2,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { TextLayer } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
+// Hooks
+import { useTouchZoom } from '@/reader/touchZoom/touchZoom'
 // Services
 import { loadPdf } from '@/reader/pdfDocument/pdfDocument'
 // Types
@@ -15,6 +17,7 @@ interface Props {
   initialPage: number
   mode: ReadingMode
   zoom: number
+  onZoom?: (zoom: number) => void
   rotation: number
   onLocation: (location: ReaderLocation) => void
   onOutline: (outline: ReaderOutline[]) => void
@@ -32,8 +35,9 @@ function markMatches(container: HTMLElement, query: string) {
   }
 }
 
-function PdfPage({ pdf, pageNumber, width, zoom, rotation, active, defaultAspect, query, register, fitHeight }: {
+function PdfPage({ pdf, pageNumber, width, zoom, rotation, active, defaultAspect, query, register, fitHeight, hidden = false, direction = 0 }: {
   pdf: PDFDocumentProxy; pageNumber: number; width: number; zoom: number; rotation: number
+  hidden?: boolean; direction?: number
   active: boolean; defaultAspect: number; query: string; fitHeight?: number
   register?: (page: number, element: HTMLDivElement | null) => void
 }) {
@@ -102,7 +106,16 @@ function PdfPage({ pdf, pageNumber, width, zoom, rotation, active, defaultAspect
     }
   }, [pdf, pageNumber, pageWidth, rotation, active])
 
-  return <div ref={(element) => register?.(pageNumber, element)} className="pdf-page" data-page={pageNumber}
+  useEffect(() => {
+    if (hidden || !direction || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const animation = surface.current?.parentElement?.animate?.([
+      { transform: `translateX(${direction * 28}px)`, opacity: .65 },
+      { transform: 'translateX(0)', opacity: 1 },
+    ], { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)' })
+    return () => animation?.cancel()
+  }, [hidden, direction])
+
+  return <div hidden={hidden} ref={(element) => register?.(pageNumber, element)} className="pdf-page" data-page={pageNumber}
     role="group" aria-label={`Page ${pageNumber}`} style={{ width: pageWidth, height: pageWidth / displayedAspect }}>
     <div ref={surface} className="pdf-page-surface" aria-busy={active && loading} />
     {active && loading && <span className="pdf-page-status" role="status">Loading page {pageNumber}…</span>}
@@ -110,8 +123,11 @@ function PdfPage({ pdf, pageNumber, width, zoom, rotation, active, defaultAspect
   </div>
 }
 
-const PdfView = forwardRef<ReaderViewHandle, Props>(function PdfView({ blob, initialProgress, initialPage, mode, zoom, rotation, onLocation, onOutline }, ref) {
+const PdfView = forwardRef<ReaderViewHandle, Props>(function PdfView({ blob, initialProgress, initialPage, mode, zoom, onZoom, rotation, onLocation, onOutline }, ref) {
   const viewport = useRef<HTMLDivElement>(null)
+  const pagesElement = useRef<HTMLDivElement>(null)
+  const direction = useRef(0)
+  const [prefetch, setPrefetch] = useState(false)
   const frames = useRef(new Map<number, HTMLDivElement>())
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [page, setPage] = useState(1)
@@ -132,6 +148,13 @@ const PdfView = forwardRef<ReaderViewHandle, Props>(function PdfView({ blob, ini
   initial.current = { page: initialPage, progress: initialProgress }
   const safeZoom = Math.max(0.25, Math.min(8, Number.isFinite(zoom) && zoom > 0 ? zoom : 1))
   const safeRotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360 || 0
+  useTouchZoom(viewport, pagesElement, () => zoom === 0 ? Math.min(width, height * (safeRotation % 180 ? 1 / aspect : aspect)) / width : safeZoom, (value) => onZoom?.(value), !!pdf)
+  useEffect(() => {
+    if (!pdf) return
+    const timer = setTimeout(() => setPrefetch(true), 180)
+    return () => clearTimeout(timer)
+  }, [pdf])
+
 
   useEffect(() => {
     const controller = new AbortController()
@@ -202,6 +225,7 @@ const PdfView = forwardRef<ReaderViewHandle, Props>(function PdfView({ blob, ini
   const goToPage = useCallback((number: number) => {
     if (!pdf) return
     const next = clampPage(number, pdf.numPages)
+    direction.current = Math.sign(next - currentPage.current)
     currentPage.current = next
     setPage(next)
     setNearby(new Set([next]))
@@ -308,8 +332,8 @@ const PdfView = forwardRef<ReaderViewHandle, Props>(function PdfView({ blob, ini
 
   const activePages = new Set([page, ...[...nearby].filter((number) => number !== page).sort((a, b) => Math.abs(a - page) - Math.abs(b - page))].slice(0, MAX_VISIBLE_PAGES))
   return <div ref={viewport} className={`reader-document-viewport pdf-viewport pdf-viewport--${mode}`} aria-label="PDF document" tabIndex={0}>
-    <div className="pdf-pages">
-      {mode === 'paged' ? <PdfPage key={page} pdf={pdf} pageNumber={page} width={width} fitHeight={zoom === 0 ? height : undefined} zoom={safeZoom} rotation={safeRotation} active defaultAspect={aspect} query={query} />
+    <div ref={pagesElement} className="pdf-pages">
+      {mode === 'paged' ? [page - 1, page, page + 1].filter((number) => number >= 1 && number <= pdf.numPages && ((prefetch && safeZoom <= 1) || number === page)).map((number) => <PdfPage key={number} pdf={pdf} pageNumber={number} width={width} fitHeight={zoom === 0 ? height : undefined} zoom={safeZoom} rotation={safeRotation} active hidden={number !== page} direction={direction.current} defaultAspect={aspect} query={query} />)
         : Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} width={width} fitHeight={zoom === 0 ? height : undefined} zoom={safeZoom} rotation={safeRotation}
           active={activePages.has(index + 1)} defaultAspect={aspect} query={query} register={register} />)}
     </div>

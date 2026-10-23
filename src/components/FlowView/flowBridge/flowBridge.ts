@@ -16,6 +16,7 @@ export function createFlowClient(target: Window, channel: string, options: {
   progress: number
   resources: Blob[]
   onLocation: (location: ReaderLocation) => void
+  onFontSize?: (size: number) => void
   onEscape: () => void
   onError: (message: string) => void
 }) {
@@ -68,7 +69,8 @@ export function createFlowClient(target: Window, channel: string, options: {
       if (!valid) return
       clearTimeout(request.timer); pending.delete(data.requestId as number)
       request.resolve(data.matches as SearchMatch[])
-    } else if (data.type === 'escape') options.onEscape()
+    } else if (data.type === 'font-size' && Number.isFinite(data.fontSize) && Number(data.fontSize) >= 14 && Number(data.fontSize) <= 32) options.onFontSize?.(Math.round(Number(data.fontSize)))
+    else if (data.type === 'escape') options.onEscape()
     else if (data.type === 'error') options.onError('This document could not be displayed. Close it and try again.')
   }
   return {

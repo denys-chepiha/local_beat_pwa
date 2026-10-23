@@ -25,10 +25,16 @@ function installFlowBridge(channel) {
     let stride = 1;
     let inset = 28;
     let mode = 'paged';
+    let preferenceKey = '';
     let raf = 0;
     let scrollRaf = 0;
     /** @type {{ x: number; y: number } | undefined} */
     let touch;
+    /** @type {{distance:number,size:number,next:number} | undefined} */
+    let pinch;
+    /** @type {Animation | undefined} */
+    let turning;
+    const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     /** @param {number} value @param {number} min @param {number} max */
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     /** @param {Record<string, unknown>} data */
@@ -56,10 +62,16 @@ function installFlowBridge(channel) {
     /** @param {number} next @param {boolean} [restoring] */
     const go = (next, restoring = false) => {
         if (disposed || !initialized) return;
+        const previous = page;
         page = clamp(Math.round(next), 1, total);
         if (!restoring) progress = total <= 1 ? 1 : (page - 1) / (total - 1);
         if (mode === 'paged') {
+            const from = content.style.transform;
             content.style.transform = `translateX(-${(page - 1) * stride}px)`;
+            turning?.cancel();
+            if (!restoring && previous !== page && !reducedMotion()) {
+                turning = content.animate?.([{ transform: from }, { transform: content.style.transform }], { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)' });
+            }
             publish();
         }
         else {
@@ -72,6 +84,7 @@ function installFlowBridge(channel) {
         raf = 0;
         if (disposed || !initialized)
             return;
+        turning?.cancel();
         const saved = progress;
         measuredWidth = window.innerWidth;
         measuredHeight = window.innerHeight;
@@ -104,6 +117,9 @@ function installFlowBridge(channel) {
         const prefs = /** @type {Record<string, unknown>} */ (value);
         if (!['paged', 'scroll'].includes(String(prefs.mode)) || !['paper', 'sepia', 'night'].includes(String(prefs.theme)) || !['serif', 'sans'].includes(String(prefs.font)) || !Number.isFinite(prefs.fontSize) || !Number.isFinite(prefs.lineHeight))
             return false;
+        const nextKey = [prefs.mode, prefs.theme, prefs.font, prefs.fontSize, prefs.lineHeight].join('|');
+        if (preferenceKey === nextKey) return false;
+        preferenceKey = nextKey;
         mode = String(prefs.mode);
         const colors = prefs.theme === 'night' ? ['#202027', '#e3e0d8'] : prefs.theme === 'sepia' ? ['#f3e7cd', '#443926'] : ['#fcfcfa', '#25232b'];
         body.style.setProperty('--paper', colors[0]);
@@ -125,6 +141,7 @@ function installFlowBridge(channel) {
         const target = document.getElementById(id);
         if (!target || !content.contains(target))
             return;
+        turning?.cancel();
         const rect = target.getBoundingClientRect();
         if (mode === 'paged')
             go(Math.floor((rect.left - inset + (page - 1) * stride) / stride) + 1);
@@ -200,11 +217,30 @@ function installFlowBridge(channel) {
         }
     };
     /** @param {TouchEvent} event */
-    const touchStart = (event) => { touch = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : undefined; };
+    const touchStart = (event) => {
+        if (event.touches.length === 2) {
+            const size = parseFloat(body.style.fontSize) || 18;
+            pinch = { distance: Math.max(1, Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY)), size, next: size };
+        }
+        touch = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : undefined; };
+    /** @param {TouchEvent} event */
+    const touchMove = (event) => {
+        if (!pinch || event.touches.length !== 2) return;
+        event.preventDefault();
+        const distance = Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
+        pinch.next = clamp(Math.round(pinch.size * distance / pinch.distance), 14, 32);
+    };
+    const touchCancel = () => { touch = undefined; pinch = undefined; };
     /** @param {TouchEvent} event */
     const touchEnd = (event) => {
         const start = touch;
         touch = undefined;
+        if (pinch) {
+            const fontSize = pinch.next; pinch = undefined;
+            body.style.fontSize = `${fontSize}px`; scheduleMeasure();
+            send({ type: 'font-size', fontSize });
+            return;
+        }
         if (!start || mode !== 'paged' || !event.changedTouches[0] || document.getSelection()?.toString())
             return;
         const dx = event.changedTouches[0].clientX - start.x;
@@ -299,6 +335,7 @@ function installFlowBridge(channel) {
         finishImages(); clearTimeout(imageWaitTimer);
         generation++;
         resourceUrls.forEach((url) => URL.revokeObjectURL(url));
+        turning?.cancel();
         observer.disconnect();
         cancelAnimationFrame(raf);
         cancelAnimationFrame(scrollRaf);
@@ -312,6 +349,8 @@ function installFlowBridge(channel) {
         body.removeEventListener('click', clicked);
         body.removeEventListener('touchstart', touchStart);
         body.removeEventListener('touchend', touchEnd);
+        body.removeEventListener('touchmove', touchMove);
+        body.removeEventListener('touchcancel', touchCancel);
         document.removeEventListener('keydown', keydown);
         images.forEach((image) => image.removeEventListener('load', scheduleMeasure));
     };
@@ -325,6 +364,8 @@ function installFlowBridge(channel) {
     body.addEventListener('click', clicked);
     body.addEventListener('touchstart', touchStart, { passive: true });
     body.addEventListener('touchend', touchEnd, { passive: true });
+    body.addEventListener('touchmove', touchMove, { passive: false });
+    body.addEventListener('touchcancel', touchCancel);
     document.addEventListener('keydown', keydown);
     images.forEach((image) => image.addEventListener('load', scheduleMeasure));
     observer.observe(document.documentElement);

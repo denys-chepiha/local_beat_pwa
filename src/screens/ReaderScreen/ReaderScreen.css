@@ -1,7 +1,6 @@
 .reader-workspace { --reader-paper: #fcfcfa; --reader-ink: #25232b; display: flex; flex-direction: column; height: calc(100dvh - var(--nav-h) - var(--safe-top)); min-height: 300px; width: 100%; background: var(--bg); }
 .reader-workspace[data-theme='sepia'] { --reader-paper: #f3e7cd; --reader-ink: #443926; }
 .reader-workspace[data-theme='night'] { --reader-paper: #202027; --reader-ink: #e3e0d8; }
-.reader-workspace--expanded, .reader-workspace:fullscreen { position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; padding-top: var(--safe-top); }
 .reader-heading { padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex: none; border-bottom: 1px solid var(--border); }
 .reader-heading > div { min-width: 0; flex: 1; }
 .reader-heading h1 { font-size: 17px; font-weight: 650; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -49,5 +48,10 @@
 @media (max-width: 767px) { .reader-heading { padding: 8px 10px; gap: 8px; } .reader-heading h1 { font-size: 15px; } .reader-toolbar { padding: 6px 10px; gap: 6px; } .reader-panel { position: absolute; inset: 0 auto 0 0; width: min(340px, 100%); z-index: 4; box-shadow: 8px 0 24px rgb(0 0 0 / .2); border: 0; } .reader-pagination { padding-inline: 10px; gap: 4px; } .reader-pagination .btn span { display: none; } .reader-pagination .btn { padding: 10px; } }
 @media (max-height: 500px) and (orientation: landscape) { .reader-heading { padding-block: 4px; } .reader-heading p { display: none; } .reader-toolbar { padding-block: 3px; } .reader-pagination { padding-block: 3px; } .reader-workspace { min-height: 230px; } }
 
-.reader-page-progress { padding: 0 16px; height: 28px; flex: none; display: flex; align-items: center; }
-.reader-page-progress .progress-slider { --progress-slider-color: #b5a2ff; }
+
+.reader-toolbar .btn { width: 44px; padding: 0; }
+.reader-workspace--expanded { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; min-height: 0; padding: 0; z-index: 200; }
+.reader-workspace--expanded > .reader-heading, .reader-workspace--expanded > .reader-toolbar, .reader-workspace--expanded > .reader-pagination { display: none; }
+.reader-exit-fullscreen { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); z-index: 10; width: 44px; height: 44px; color: var(--reader-ink); background: var(--reader-paper); border: 1px solid currentColor; opacity: .8; }
+.reader-workspace--expanded .pdf-pages { padding: 0; }
+.reader-image { min-width: 0; min-height: 0; touch-action: pan-x pan-y; overscroll-behavior: contain; }

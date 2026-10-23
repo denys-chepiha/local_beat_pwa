@@ -16,7 +16,7 @@ and listen, watch or read — even without internet.
 
 ## Features
 
-- Create / rename / delete unlimited playlists (auto-saved)
+- Create / rename / delete unlimited playlists (auto-saved); New Playlist opens an inline name field
 - Add multiple local files at once — `mp3, m4a, aac, wav, ogg, flac, opus`
 - Metadata extraction (title / artist / album / cover art) with filename fallback
 - Per-track duration, file size and storage stats
@@ -85,7 +85,7 @@ Music opens by default. The top tabs are Music, Audio Books, Reader, Video; each
 
 Add PDF, EPUB, FB2 (including .fb2.zip), TXT, Markdown, HTML, DOCX, JPEG, PNG and WebP to the local book library. Cover cards use the PDF first page, an embedded book cover or a title fallback. Search/filter/sort the library, reopen at the saved reading position, and remove local copies when finished. Files and bookmarks survive reload on the same device; there is no cloud sync. Import originals separately on other devices.
 
-Reading supports paged mode with left/right swipes, continuous scrolling, page counts/jump, the shared progress slider, search, contents, bookmarks and fullscreen. Keyboard Left/Right and Page Up/Down move pages; Escape closes a panel or exits fullscreen fallback. Paper, sepia and night tones change the reading surface. Text documents have font, size and line-spacing controls; PDF/images offer fit, zoom and rotation. PDF text is selectable when the document includes a text layer; password-protected PDFs prompt for their password.
+Reading supports paged mode with left/right swipes, continuous scrolling, page counts/jump, search, contents, bookmarks and fullscreen. Reader actions use labeled icons; there is no audio-style progress slider. Fullscreen leaves only the page and a small exit icon at the bottom right. Keyboard Left/Right and Page Up/Down move pages; Escape closes a panel or exits fullscreen fallback. Paper, sepia and night tones change the reading surface. Text documents have font, size and line-spacing controls; PDF/images offer fit, zoom and rotation. Pinch to zoom PDF/images and drag to pan an enlarged page; pinch in text books adjusts text size while retaining your place. Page turns animate unless reduced motion is enabled. On iPhone Safari without native element fullscreen, reading fills the app viewport; opening the installed PWA avoids browser toolbars. PDF text is selectable when the document includes a text layer; password-protected PDFs prompt for their password.
 
 Reflowed page numbers depend on screen/font settings. Scanned PDFs and images have no text search without OCR. DOCX conversion is for reading, not exact print reproduction. DRM-encrypted books, legacy DOC, DjVu, MOBI, spreadsheets and presentations are unsupported; export them to PDF first. Document scripts, external resources, SVG, embedded styles and fonts are omitted. Reading tones do not alter system display temperature.
 

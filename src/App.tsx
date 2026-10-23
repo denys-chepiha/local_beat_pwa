@@ -3,15 +3,14 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 // Components
 import SectionSwitcher from '@/components/SectionSwitcher'
 import ChepioTechFooter from '@/components/ChepioTechFooter/ChepioTechFooter'
-import MiniPlayer from '@/components/MiniPlayer'
-// Components
-import HomeScreen from '@/screens/HomeScreen'
+import HomeScreen from '@/screens/HomeScreen/HomeScreen'
 // Store
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { useAudiobookStore } from '@/store/useAudiobookStore'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
 
+const MiniPlayer = lazy(() => import('@/components/MiniPlayer'))
 const FullPlayer = lazy(() => import('@/components/FullPlayer'))
 const VideoScreen = lazy(() => import('@/screens/VideoScreen/VideoScreen'))
 const ReaderScreen = lazy(() => import('@/screens/ReaderScreen/ReaderScreen'))

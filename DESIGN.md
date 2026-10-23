@@ -21,7 +21,6 @@ colors:
   reader-selected: "#342855"
   reader-selected-text: "#e7deff"
   reader-focus: "#ad9aff"
-  reader-progress: "#b5a2ff"
   reader-paper: "#fcfcfa"
   reader-paper-ink: "#25232b"
   reader-sepia: "#f3e7cd"
@@ -161,7 +160,7 @@ components:
 
 Local Beat uses a dark application shell, purple gradient primary actions, rounded controls and the operating system's sans-serif typeface. This document records that incumbent system and its reader extension. The approved direction is preservation; it introduces no replacement identity or new brand metaphor.
 
-The reader keeps the same navigation, action styles and progress control. Its library gives real covers room to remain recognizable, with a plain title card when a cover is unavailable. Opening a book introduces a selectable paper, sepia or night page inside the dark application controls. Reading typography is separate from interface typography.
+The reader keeps the same navigation and action styles, with icon actions and page-number navigation instead of a media progress slider. Its library gives real covers room to remain recognizable, with a plain title card when a cover is unavailable. Opening a book introduces a selectable paper, sepia or night page inside the dark application controls. Reading typography is separate from interface typography.
 
 **Key Characteristics:**
 
@@ -169,7 +168,7 @@ The reader keeps the same navigation, action styles and progress control. Its li
 - Purple gradient primary actions and selected navigation.
 - Rounded rectangles, pill tabs and circular icon controls.
 - Real cover imagery, legible title fallbacks and selectable page tones.
-- Shared progress-slider geometry across music, audiobooks, reader and video.
+- Shared progress-slider geometry across music, audiobooks and video; the reader uses page navigation.
 
 ## Colors
 
@@ -178,7 +177,7 @@ The shell uses nearly black neutrals; purple identifies primary actions and sele
 ### Primary
 
 - **Accent** and **Accent 2** form the existing diagonal action gradient. The gradient is an image value in `--accent-grad`, so its exact declaration belongs in the sidecar component snippets rather than a color primitive.
-- **Reader focus** is the lighter purple outline used inside the reader and library. **Reader progress** is the reader's slider fill and thumb color.
+- **Reader focus** is the lighter purple outline used inside the reader and library.
 - **Reader selected** and **Reader selected text** indicate an open toolbar panel. **Reader cover** and **Reader cover text** belong to coverless title cards.
 
 ### Neutral
@@ -206,7 +205,7 @@ The application is centered with a maximum width of 640 pixels below the tablet 
 
 The reader library uses 24-pixel horizontal padding and a cover grid with auto-filled columns of at least 170 pixels, with 26-pixel row and 22-pixel column gaps. At widths up to 599 pixels it uses two equal columns, 16-pixel page padding and 24-by-16-pixel grid gaps; the search field takes a complete row. These are surface-specific rules, not a universal card grid.
 
-An open book fills the viewport below navigation. Its compact heading and horizontally scrollable toolbar sit above a flexible document area; page progress and pagination sit below it. The document frame keeps the dark controls outside the reading tone. A 300-pixel panel sits beside the document on wider screens. At widths up to 767 pixels it overlays the document, capped at 340 pixels. Fullscreen covers the viewport while respecting the top safe area.
+An open book fills the viewport below navigation. Its compact heading and horizontally scrollable toolbar sit above a flexible document area; page-number navigation sits below it. The document frame keeps the dark controls outside the reading tone. A 300-pixel panel sits beside the document on wider screens. At widths up to 767 pixels it overlays the document, capped at 340 pixels. Fullscreen fills the application viewport with only a small bottom-right exit icon; its touch target respects safe areas.
 
 Reflow text has a maximum content width of 760 pixels, 28-pixel minimum horizontal insets and 24-pixel vertical insets. Paged layout uses a 40-pixel inter-column gap. Short landscape screens compact the controls. Tablet media players also adapt their existing controls and artwork layout; their rules remain in the global stylesheet.
 
@@ -248,7 +247,7 @@ Three adjacent buttons select Paper, Sepia or Night. Each uses its corresponding
 
 ### Shared progress slider
 
-`ProgressSlider` is the shared native range input for media progress and related range controls. It has a 44-pixel control box, 8-pixel visible track and 30-pixel circular thumb with a two-pixel border. The filled track and thumb share a customizable color; the remaining track is translucent white. Reader page progress overrides the default white with the existing light-purple value. Its wrapper is compact while preserving the input geometry.
+`ProgressSlider` is the shared native range input for media progress and related range controls. It has a 44-pixel control box, 8-pixel visible track and 30-pixel circular thumb with a two-pixel border. The filled track and thumb share a customizable color; the remaining track is translucent white. The reader does not display a progress slider; its text-size setting still uses the shared range component.
 
 The component clamps supplied values, handles invalid bounds, and disables a range with no available span. It forwards native input semantics and accessibility attributes. Keep the global raw-range rules distinct from this component's more-specific styles; they coexist in the current source.
 
@@ -270,3 +269,7 @@ The component clamps supplied values, handles invalid bounds, and disables a ran
 - **Don't** treat the document preview's synthesized tonal ramps as approved application colors.
 - **Don't** crop book covers to fill the library card; the implemented cover treatment contains the full image.
 - **Don't** use reading-page tones to recolor the shared navigation or reader toolbar.
+
+### Reader touch interactions
+
+Toolbar actions are icon-only with accessible names and titles. PDF/images support pinch zoom and single-finger panning; text pinch adjusts font size. Page changes use a short 180ms directional motion, disabled for reduced motion and automatic layout changes. Fullscreen hides all reading chrome except the bottom-right exit target. New Playlist uses an inline focused text field, Cancel and Create, with recoverable save errors.

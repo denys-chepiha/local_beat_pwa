@@ -124,3 +124,33 @@ describe('flow runtime logical position', () => {
     expect(view.scroller.scrollTop).toBeGreaterThan(0)
   })
 })
+
+it('pinches text without changing pages, then lays out at the new font size', () => {
+  const view = openRuntime(31)
+  const touch = (type: string, touches: { clientX: number; clientY: number }[]) => {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperties(event, { touches: { value: touches }, changedTouches: { value: touches } })
+    document.body.dispatchEvent(event)
+    return event
+  }
+  touch('touchstart', [{ clientX: 0, clientY: 0 }, { clientX: 100, clientY: 0 }])
+  expect(touch('touchmove', [{ clientX: 0, clientY: 0 }, { clientX: 150, clientY: 0 }]).defaultPrevented).toBe(true)
+  touch('touchend', [{ clientX: 0, clientY: 0 }]); view.flush()
+  expect(document.body.style.fontSize).toBe('27px')
+  expect(view.latest().progress).toBe(2 / 30)
+})
+
+it('animates explicit page turns but not layout changes or reduced-motion navigation', () => {
+  const view = openRuntime(31)
+  const animate = vi.fn(() => ({ cancel: vi.fn() }))
+  Object.defineProperty(view.content, 'animate', { value: animate, configurable: true })
+  vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  view.command({ type: 'page', page: 4 })
+  expect(animate).toHaveBeenCalledOnce()
+  view.resize(40)
+  expect(animate).toHaveBeenCalledOnce()
+  vi.stubGlobal('matchMedia', () => ({ matches: true }))
+  view.command({ type: 'page', page: 9 })
+  expect(animate).toHaveBeenCalledOnce()
+  vi.unstubAllGlobals()
+})

@@ -181,3 +181,18 @@ it('releases a page that arrives after its frame was replaced', async () => {
   await act(async () => { finish(first) })
   expect(first.cleanup).toHaveBeenCalled()
 })
+
+it('reuses nearby page canvases when turning back and keeps the cache bounded', async () => {
+  const pdf = makeDocument(12)
+  load.mockReturnValue({ promise: Promise.resolve(pdf), destroy: vi.fn(async () => {}) })
+  const ref = createRef<ReaderViewHandle>()
+  const { container } = render(<PdfView ref={ref} {...base()} />)
+  await waitFor(() => expect(container.querySelectorAll('canvas')).toHaveLength(2))
+  const first = container.querySelector('[data-page="1"] canvas')
+  act(() => ref.current!.goToPage(2))
+  await waitFor(() => expect(container.querySelectorAll('canvas')).toHaveLength(3))
+  act(() => ref.current!.goToPage(1))
+  expect(container.querySelector('[data-page="1"] canvas')).toBe(first)
+  expect(container.querySelectorAll('.pdf-page:not([hidden])')).toHaveLength(1)
+  expect(container.querySelectorAll('canvas').length).toBeLessThanOrEqual(3)
+})

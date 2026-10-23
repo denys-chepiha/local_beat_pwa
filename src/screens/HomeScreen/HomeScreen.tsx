@@ -1,13 +1,15 @@
 // Core
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 // Components
 import PlaylistCard from '@/components/PlaylistCard'
-import PlaylistFormModal from '@/components/PlaylistFormModal'
 import { PlusIcon, SettingsIcon, MusicIcon } from '@/components/Icons'
-// Store
+// Services
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
+// Styles
+import './HomeScreen.css'
 
 export default function HomeScreen() {
   const playlists = useLibraryStore((s) => s.playlists)
@@ -17,12 +19,22 @@ export default function HomeScreen() {
   const nowPlaying = usePlayerStore((s) => s.nowPlaying)
   const handleTracksRemoved = usePlayerStore((s) => s.handleTracksRemoved)
   const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+  const createButton = useRef<HTMLButtonElement>(null)
 
-  const handleCreate = async (name: string) => {
-    const playlist = await createPlaylist(name)
-    setCreating(false)
-    openPlaylist(playlist.id)
+  const handleCreate = async () => {
+    if (saving || !name.trim()) return
+    setSaving(true); setError('')
+    try {
+      const playlist = await createPlaylist(name.trim())
+      setCreating(false); setName(''); openPlaylist(playlist.id)
+    } catch { setError('The playlist could not be saved. Please try again.') }
+    finally { setSaving(false) }
   }
+  const cancel = () => { flushSync(() => { setCreating(false); setName(''); setError('') }); createButton.current?.focus() }
 
   const handleDeletePlaylist = (playlistId: string, trackIds: string[]) => {
     handleTracksRemoved(trackIds)
@@ -75,19 +87,17 @@ export default function HomeScreen() {
       </section>
 
       <section className="home-create">
-        <button className="btn primary block" onClick={() => setCreating(true)}>
-          <PlusIcon width={18} height={18} /> New Playlist
-        </button>
+        {creating ? <form className="playlist-create-form" onSubmit={(event) => { event.preventDefault(); void handleCreate() }}>
+          <label htmlFor="new-playlist-name">Playlist name</label>
+          <input ref={input} id="new-playlist-name" type="text" maxLength={80} autoComplete="off" enterKeyHint="done" placeholder="Playlist name" value={name} disabled={saving}
+            onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) cancel() }} />
+          <div><button className="btn" type="button" disabled={saving} onClick={cancel}>Cancel</button><button className="btn primary" disabled={saving || !name.trim()}>{saving ? 'Creating…' : 'Create'}</button></div>
+          {error && <p role="alert">{error}</p>}
+        </form> : <button ref={createButton} className="btn primary block" onClick={() => {
+          // Keep focus in the original tap so iOS can open its keyboard.
+          flushSync(() => setCreating(true)); input.current?.focus()
+        }}><PlusIcon width={18} height={18} /> New Playlist</button>}
       </section>
-
-      {creating && (
-        <PlaylistFormModal
-          title="New Playlist"
-          confirmLabel="Create"
-          onSubmit={handleCreate}
-          onClose={() => setCreating(false)}
-        />
-      )}
     </div>
   )
 }

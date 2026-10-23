@@ -8,17 +8,17 @@ import type { ReaderLocation, ReaderOutline, ReaderViewHandle, ReadingPreference
 // Styles
 import './FlowView.css'
 
-type Props = { blob: Blob; fileName: string; initialProgress: number; preferences: ReadingPreferences; onLocation: (location: ReaderLocation) => void; onOutline: (outline: ReaderOutline[]) => void }
+type Props = { blob: Blob; fileName: string; initialProgress: number; preferences: ReadingPreferences; onFontSize?: (size: number) => void; onLocation: (location: ReaderLocation) => void; onOutline: (outline: ReaderOutline[]) => void }
 type PreparedDocument = { html: string; resources: Blob[]; channel: string; nonce: string; progress: number }
-const FRAME_CSS = `*{box-sizing:border-box}html{overflow:hidden}html,body{margin:0;height:100%;background:var(--paper,#fff);color:var(--ink,#25232b)}body{overflow:hidden;font-family:Georgia,serif;font-size:18px;line-height:1.65}#reader-scroll{height:100%;padding:24px 28px;overflow:hidden}#reader-content{overflow-wrap:anywhere;hyphens:auto}p,ul,ol,blockquote,pre,table,figure{margin:0 0 1em}h1,h2,h3,h4,h5,h6{line-height:1.25;break-after:avoid;margin:1.4em 0 .6em}h1:first-child,h2:first-child{margin-top:0}img{max-width:100%;max-height:75vh;object-fit:contain;break-inside:avoid}table{border-collapse:collapse;max-width:100%;font-size:.9em}td,th{border:1px solid currentColor;padding:.35em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline;text-underline-offset:.16em}blockquote{padding-inline:1em;font-style:italic}hr{border:0;border-top:1px solid currentColor;opacity:.2;margin:1.5em 0}mark{background:#f2d05e;color:#242020}::selection{background:#b6a1ff;color:#17121e}body{scrollbar-color:#8b8398 transparent}a:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}`
+const FRAME_CSS = `*{box-sizing:border-box}html{overflow:hidden}html,body{margin:0;height:100%;background:var(--paper,#fff);color:var(--ink,#25232b)}body{touch-action:pan-y;overflow:hidden;font-family:Georgia,serif;font-size:18px;line-height:1.65}#reader-scroll{height:100%;padding:24px 28px;overflow:hidden}#reader-content{overflow-wrap:anywhere;hyphens:auto}p,ul,ol,blockquote,pre,table,figure{margin:0 0 1em}h1,h2,h3,h4,h5,h6{line-height:1.25;break-after:avoid;margin:1.4em 0 .6em}h1:first-child,h2:first-child{margin-top:0}img{max-width:100%;max-height:75vh;object-fit:contain;break-inside:avoid}table{border-collapse:collapse;max-width:100%;font-size:.9em}td,th{border:1px solid currentColor;padding:.35em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline;text-underline-offset:.16em}blockquote{padding-inline:1em;font-style:italic}hr{border:0;border-top:1px solid currentColor;opacity:.2;margin:1.5em 0}mark{background:#f2d05e;color:#242020}::selection{background:#b6a1ff;color:#17121e}body{scrollbar-color:#8b8398 transparent}a:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}`
 
-export default forwardRef<ReaderViewHandle, Props>(function FlowView({ blob, fileName, initialProgress, preferences, onLocation, onOutline }, ref) {
+export default forwardRef<ReaderViewHandle, Props>(function FlowView({ blob, fileName, initialProgress, preferences, onFontSize, onLocation, onOutline }, ref) {
   const [prepared, setPrepared] = useState<PreparedDocument>()
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
   const client = useRef<ReturnType<typeof createFlowClient>>()
-  const current = useRef({ onLocation, onOutline, preferences, initialProgress })
-  current.current = { onLocation, onOutline, preferences, initialProgress }
+  const current = useRef({ onFontSize, onLocation, onOutline, preferences, initialProgress })
+  current.current = { onFontSize, onLocation, onOutline, preferences, initialProgress }
   useEffect(() => {
     const controller = new AbortController()
     let loaded: ParsedDocument | undefined
@@ -42,6 +42,7 @@ export default forwardRef<ReaderViewHandle, Props>(function FlowView({ blob, fil
     const connection = createFlowClient(iframe.contentWindow, prepared.channel, {
       preferences: current.current.preferences, progress: prepared.progress, resources: prepared.resources,
       onLocation: (location) => { clearTimeout(timeout); current.current.onLocation(location) },
+      onFontSize: (size) => current.current.onFontSize?.(size),
       onEscape: () => iframe.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
       onError: setError,
     })

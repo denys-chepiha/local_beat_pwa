@@ -1,16 +1,10 @@
-// Core
-import { marked } from 'marked'
 // Types
 import type { ParsedDocument } from './types'
 import { DOCUMENT_LIMITS, DocumentParseError } from './types'
 // Utils
 import { DocumentAssets } from './documentAssets'
-import { readArchive } from './readArchive'
 import { checkAbort, decodeText, escapeHtml, readDocumentBytes, yieldToBrowser } from './readDocument'
 import { htmlTitle, sanitizeDocument } from './sanitizeDocument'
-import { parseEpub } from './parseEpub'
-import { parseFb2 } from './parseFb2'
-import { parseDocx } from './parseDocx'
 
 export type { ParsedDocument } from './types'
 export { DOCUMENT_LIMITS, DocumentParseError } from './types'
@@ -34,19 +28,20 @@ export async function parseDocument(file: Blob, fileName: string, signal?: Abort
     let cover: Blob | undefined
     let sections
     if (archiveFormat) {
+      const { readArchive } = await import('./readArchive')
       const archive = await readArchive(bytes, signal)
-      if (extension === 'epub') ({ title, author, cover, sections } = await parseEpub(archive, assets, signal))
-      else if (extension === 'docx') ({ title, author, sections } = await parseDocx(bytes, archive, assets, signal))
+      if (extension === 'epub') ({ title, author, cover, sections } = await (await import('./parseEpub')).parseEpub(archive, assets, signal))
+      else if (extension === 'docx') ({ title, author, sections } = await (await import('./parseDocx')).parseDocx(bytes, archive, assets, signal))
       else {
         const entries = Array.from(archive.entries()).filter(([path]) => path.toLowerCase().endsWith('.fb2'))
         if (entries.length !== 1) throw new DocumentParseError('A FictionBook ZIP must contain exactly one FB2 document.')
-        ;({ title, author, cover, sections } = parseFb2(decodeText(entries[0][1]), assets, signal))
+        ;({ title, author, cover, sections } = (await import('./parseFb2')).parseFb2(decodeText(entries[0][1]), assets, signal))
       }
     } else {
       const source = decodeText(bytes)
-      if (extension === 'fb2') ({ title, author, cover, sections } = parseFb2(source, assets, signal))
+      if (extension === 'fb2') ({ title, author, cover, sections } = (await import('./parseFb2')).parseFb2(source, assets, signal))
       else if (extension === 'txt') sections = [{ key: 'text', html: source.replace(/\r\n?/g, '\n').split(/\n[\t ]*\n/).map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`).join('\n') }]
-      else if (extension === 'md' || extension === 'markdown') sections = [{ key: 'markdown', html: await marked.parse(source, { async: true, gfm: true }) }]
+      else if (extension === 'md' || extension === 'markdown') sections = [{ key: 'markdown', html: await (await import('marked')).marked.parse(source, { async: true, gfm: true }) }]
       else { title = htmlTitle(source); sections = [{ key: 'html', html: source }] }
     }
     checkAbort(signal)

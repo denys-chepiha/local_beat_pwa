@@ -13,7 +13,7 @@ const preferences: ReadingPreferences = { mode: 'scroll', theme: 'paper', fontSi
 const channel = 'a'.repeat(32)
 function connection() {
   const target = { postMessage: vi.fn() } as unknown as Window
-  const options = { preferences, progress: .25, resources: [], onLocation: vi.fn(), onEscape: vi.fn(), onError: vi.fn() }
+  const options = { preferences, progress: .25, resources: [], onLocation: vi.fn(), onFontSize: vi.fn(), onEscape: vi.fn(), onError: vi.fn() }
   const client = createFlowClient(target, channel, options)
   const receive = (data: Record<string, unknown>, source: Window = target) => client.receive(new MessageEvent('message', { source, origin: 'null', data: { scope: 'local-beat-flow', channel, ...data } }))
   return { client, target, options, receive }
@@ -105,4 +105,16 @@ describe('flow bridge parent protocol', () => {
     expect(scriptPolicy).not.toContain('unsafe-eval')
     expect(doc.scripts[0].getAttribute('data-reader-channel')).toBe(channel)
   })
+})
+
+
+it('accepts bounded font-size gestures only from the authenticated frame', () => {
+  const view = connection()
+  for (const fontSize of [NaN, Infinity, '24', 13, 33]) view.receive({ type: 'font-size', fontSize })
+  view.receive({ type: 'font-size', fontSize: 24 }, window)
+  view.receive({ type: 'font-size', fontSize: 24, channel: 'forged' })
+  expect(view.options.onFontSize).not.toHaveBeenCalled()
+  view.receive({ type: 'font-size', fontSize: 24 })
+  expect(view.options.onFontSize).toHaveBeenCalledExactlyOnceWith(24)
+  view.client.dispose()
 })

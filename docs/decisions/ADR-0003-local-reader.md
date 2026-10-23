@@ -1,7 +1,7 @@
 # ADR-0003: Persistent local reader
 
 ## Status
-Accepted. Iframe access arrangement superseded by ADR-0005; other decisions retained.
+Accepted. Iframe access arrangement superseded by ADR-0005; reader progress-slider presentation superseded by ADR-0007; other decisions retained.
 
 ## Date
 2026-10-23
