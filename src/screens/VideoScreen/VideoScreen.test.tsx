@@ -115,10 +115,10 @@ it('restores video position and marks completed files', () => {
   expect(screen.getByText('✓ Watched')).toBeInTheDocument()
 })
 
-it('keeps volume controls on the right and indicates zero volume as muted', () => {
+it('keeps fullscreen last in the transport and restores volume after muting', () => {
   const { container } = render(<VideoScreen />)
   choose('volume.mp4')
-  const group = container.querySelector('.video-right-controls')!
+  const group = container.querySelector('.video-transport')!
   expect(group.lastElementChild).toHaveAttribute('aria-label', 'Enter fullscreen')
   const slider = screen.getByRole('slider', { name: 'Video volume' })
   fireEvent.change(slider, { target: { value: 0 } })
@@ -236,4 +236,56 @@ it('shows a central play button on pause and hides it when playback starts', () 
   fireEvent.click(screen.getByRole('button', { name: 'Pause video' }))
   expect(video.paused).toBe(true)
   expect(screen.getByRole('button', { name: 'Play video from center' })).toBeVisible()
+})
+
+
+it('opens one lower panel at a time and keeps settings visible during playback', () => {
+  vi.useFakeTimers()
+  const { container } = render(<VideoScreen />)
+  choose('settings.mp4', 'next.mp4')
+  metadata(container.querySelector('video')!)
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  expect(screen.getByRole('complementary', { name: 'Video playlist' })).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Video settings' }))
+  expect(screen.queryByRole('complementary', { name: 'Video playlist' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Video settings' })).toHaveAttribute('aria-expanded', 'true')
+  act(() => vi.advanceTimersByTime(2600))
+  expect(container.querySelector('.video-overlay')).not.toHaveClass('video-overlay--hidden')
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  expect(screen.getByRole('button', { name: 'Video settings' })).toHaveAttribute('aria-expanded', 'false')
+  fireEvent.click(screen.getByRole('button', { name: '1settings.mp4' }))
+  expect(screen.queryByRole('complementary', { name: 'Video playlist' })).toBeNull()
+  expect(container.querySelector('video')!.paused).toBe(false)
+})
+
+it('dismisses lower panels with Escape and restores focus to their toggles', () => {
+  render(<VideoScreen />)
+  choose('keyboard.mp4')
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  const close = screen.getByRole('button', { name: 'Close playlist' })
+  close.focus()
+  fireEvent.keyDown(close, { key: 'Escape' })
+  expect(screen.queryByRole('complementary', { name: 'Video playlist' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Show playlist' })).toHaveFocus()
+  const settings = screen.getByRole('button', { name: 'Video settings' })
+  fireEvent.click(settings)
+  const speed = screen.getByRole('combobox', { name: 'Playback speed' })
+  speed.focus()
+  fireEvent.keyDown(speed, { key: 'Escape' })
+  expect(settings).toHaveAttribute('aria-expanded', 'false')
+  expect(settings).toHaveFocus()
+})
+
+it('uses full-window fallback on Safari so the playlist remains available', () => {
+  const { container } = render(<VideoScreen />)
+  choose('safari.mp4')
+  const video = container.querySelector('video')!
+  const nativeFullscreen = vi.fn()
+  Object.defineProperty(video, 'webkitEnterFullscreen', { value: nativeFullscreen })
+  fireEvent.click(screen.getByRole('button', { name: 'Enter fullscreen' }))
+  expect(nativeFullscreen).not.toHaveBeenCalled()
+  expect(container.querySelector('.video-stage')).toHaveClass('video-stage--expanded')
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  expect(screen.getByRole('complementary', { name: 'Video playlist' })).toBeVisible()
 })

@@ -1,7 +1,7 @@
 // Core
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 // Components
-import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, XIcon } from '@/components/Icons'
+import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, PlaylistIcon, SettingsIcon, XIcon } from '@/components/Icons'
 // Services
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
@@ -23,6 +23,9 @@ export default function VideoScreen() {
   const [volume, setVolume] = useState(1)
   const [expanded, setExpanded] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const queueToggleRef = useRef<HTMLButtonElement>(null)
+  const settingsToggleRef = useRef<HTMLButtonElement>(null)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [activity, setActivity] = useState(0)
   const [scrubbing, setScrubbing] = useState(false)
@@ -57,10 +60,10 @@ export default function VideoScreen() {
 
   useEffect(() => { pauseAudio(); return () => { if (audioGraph.current) { void audioGraph.current.context.close(); audioGraph.current = null } } }, [pauseAudio])
   useEffect(() => {
-    if (!playing || queueOpen || controlsFocused || scrubbing) { setControlsVisible(true); return }
+    if (!playing || queueOpen || settingsOpen || controlsFocused || scrubbing) { setControlsVisible(true); return }
     const timer = setTimeout(() => setControlsVisible(false), 2500)
     return () => clearTimeout(timer)
-  }, [playing, queueOpen, controlsFocused, activity, scrubbing])
+  }, [playing, queueOpen, settingsOpen, controlsFocused, activity, scrubbing])
   useEffect(() => {
     const changed = () => { setExpanded(!!document.fullscreenElement); wake() }
     document.addEventListener('fullscreenchange', changed)
@@ -148,11 +151,13 @@ export default function VideoScreen() {
     setTime(videoRef.current.currentTime)
     wake()
   }
+  const closeQueue = () => { setQueueOpen(false); if (queueOpen) queueToggleRef.current?.focus(); wake() }
+  const toggleQueue = () => { setQueueOpen(!queueOpen); setSettingsOpen(false); wake() }
   const select = (id: number, shouldPlay = true) => {
+    closeQueue()
     if (id === activeId) { if (shouldPlay) play(); return }
     autoplay.current = shouldPlay
     setActiveId(id)
-    setQueueOpen(false)
   }
   const navigate = (delta: number) => {
     const next = entries[activeIndex + delta]
@@ -166,10 +171,7 @@ export default function VideoScreen() {
     if (stage?.requestFullscreen) {
       try { await stage.requestFullscreen(); setExpanded(true); return } catch { /* Use a full-window player when Safari denies fullscreen. */ }
     }
-    const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null
-    if (video?.webkitEnterFullscreen) {
-      try { video.webkitEnterFullscreen(); return } catch { /* Full-window fallback. */ }
-    }
+    // Keep the playlist and app controls available on iPhone, too.
     setExpanded(true)
   }
   const remove = (id: number) => {
@@ -177,7 +179,7 @@ export default function VideoScreen() {
     if (id === activeId) {
       autoplay.current = playing
       setActiveId(remaining[Math.min(activeIndex, remaining.length - 1)]?.id ?? null)
-      if (!remaining.length) { setExpanded(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}) }
+      if (!remaining.length) { setQueueOpen(false); setSettingsOpen(false); setExpanded(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}) }
     }
     setEntries(remaining)
   }
@@ -194,7 +196,14 @@ export default function VideoScreen() {
       </header>
       <div ref={stageRef} className={`video-stage${expanded ? ' video-stage--expanded' : ''}${playing && !controlsVisible ? ' video-stage--quiet' : ''}`} tabIndex={0}
         aria-label="Video player" onPointerMove={(event) => { if (event.pointerType !== 'touch') wake() }}
-        onKeyDownCapture={wake}
+        onKeyDownCapture={(event) => {
+          wake()
+          if (event.key === 'Escape' && (queueOpen || settingsOpen)) {
+            event.preventDefault(); event.stopPropagation()
+            if (queueOpen) closeQueue()
+            else { setSettingsOpen(false); settingsToggleRef.current?.focus() }
+          }
+        }}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return
           if (event.key === ' ' || event.key === 'k') { event.preventDefault(); togglePlay() }
@@ -218,62 +227,67 @@ export default function VideoScreen() {
           }} />
         {file ? (
           <>
-            <video ref={videoRef} playsInline preload="metadata" aria-label={file.name} muted={muted}
-              onLoadedMetadata={() => {
-                const video = videoRef.current!
-                setDuration(Number.isFinite(video.duration) ? video.duration : 0)
-                const saved = useVideoSession.getState().progress[activeId!]
-                if (saved && Number.isFinite(video.duration)) { video.currentTime = saved.time >= video.duration ? 0 : Math.min(saved.time, video.duration); setTime(video.currentTime) }
-                video.playbackRate = rate
-                if (supportsVolume) video.volume = volume
-                if (autoplay.current) { autoplay.current = false; play() }
-              }}
-              onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
-              onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
-              onPlay={() => { handoff(); resumeGraph(); setPlaying(true); setError(null) }} onPause={() => { silenceGraph(); setPlaying(false) }}
-              onEnded={() => {
-                silenceGraph()
-                setPlaying(false)
-                if (activeId !== null) saveProgress(activeId, duration, true)
-                if (repeat === 'one') { seek(0); play() }
-                else if (activeIndex < entries.length - 1) navigate(1)
-                else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
-              }}
-              onClick={(event) => {
-                const bounds = event.currentTarget.getBoundingClientRect()
-                const side = event.clientX < bounds.left + bounds.width / 2 ? -1 : 1
-                const now = performance.now()
-                const previous = lastTap.current
-                wake()
-                if (previous && previous.side === side && now - previous.at <= 350) {
-                  lastTap.current = null
-                  seek(event.currentTarget.currentTime + side * 10)
-                } else lastTap.current = { at: now, side }
-              }}
-              onError={() => { silenceGraph(); setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
-            {!playing && !queueOpen && <button className="video-center-play" aria-label="Play video from center" onClick={() => { lastTap.current = null; wake(); play() }}><PlayIcon width={40} height={40} /></button>}
+            <div className="video-viewport">
+              <video ref={videoRef} playsInline preload="metadata" aria-label={file.name} muted={muted}
+                onLoadedMetadata={() => {
+                  const video = videoRef.current!
+                  setDuration(Number.isFinite(video.duration) ? video.duration : 0)
+                  const saved = useVideoSession.getState().progress[activeId!]
+                  if (saved && Number.isFinite(video.duration)) { video.currentTime = saved.time >= video.duration ? 0 : Math.min(saved.time, video.duration); setTime(video.currentTime) }
+                  video.playbackRate = rate
+                  if (supportsVolume) video.volume = volume
+                  if (autoplay.current) { autoplay.current = false; play() }
+                }}
+                onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
+                onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
+                onPlay={() => { handoff(); resumeGraph(); setPlaying(true); setError(null) }} onPause={() => { silenceGraph(); setPlaying(false) }}
+                onEnded={() => {
+                  silenceGraph()
+                  setPlaying(false)
+                  if (activeId !== null) saveProgress(activeId, duration, true)
+                  if (repeat === 'one') { seek(0); play() }
+                  else if (activeIndex < entries.length - 1) navigate(1)
+                  else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
+                }}
+                onClick={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  const side = event.clientX < bounds.left + bounds.width / 2 ? -1 : 1
+                  const now = performance.now()
+                  const previous = lastTap.current
+                  wake()
+                  if (previous && previous.side === side && now - previous.at <= 350) {
+                    lastTap.current = null
+                    seek(event.currentTarget.currentTime + side * 10)
+                  } else lastTap.current = { at: now, side }
+                }}
+                onError={() => { silenceGraph(); setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
+              {!playing && <button className="video-center-play" aria-label="Play video from center" onClick={() => { lastTap.current = null; wake(); play() }}><PlayIcon width={40} height={40} /></button>}
+            </div>
             <div className={`video-overlay${controlsVisible ? '' : ' video-overlay--hidden'}`}
               onFocusCapture={(event) => { wake(); if (event.target.matches(':focus-visible')) setControlsFocused(true) }} onBlurCapture={() => setControlsFocused(false)}>
               <div className="video-top-controls">
                 <button className="video-control" onClick={library} aria-label="Back to music"><XIcon /></button>
                 <span className="video-filename">{file.name}</span>
-                <button className="video-control" aria-expanded={queueOpen} onClick={() => { setQueueOpen(!queueOpen); wake() }}>Playlist ({entries.length})</button>
               </div>
               <div className="video-bottom-controls">
                 <VideoSeek key={activeId} file={file} time={time} duration={duration} seek={seek} onScrubbing={setScrubbing} />
                 <div className="video-transport">
-                  <button className="video-control" onClick={() => navigate(-1)} disabled={activeIndex <= 0} aria-label="Previous video"><PrevIcon /></button>
-                  <button className="video-control" onClick={() => seek(time - 10)} aria-label="Rewind video 10 seconds"><Rewind10Icon /></button>
+                  <button className="video-control video-control--desktop" onClick={() => navigate(-1)} disabled={activeIndex <= 0} aria-label="Previous video"><PrevIcon /></button>
+                  <button className="video-control video-control--desktop" onClick={() => seek(time - 10)} aria-label="Rewind video 10 seconds"><Rewind10Icon /></button>
                   <button className="video-control video-control--play" onClick={togglePlay} aria-label={playing ? 'Pause video' : 'Play video'}>{playing ? <PauseIcon /> : <PlayIcon />}</button>
-                  <button className="video-control" onClick={() => seek(time + 10)} aria-label="Forward video 10 seconds"><Forward10Icon /></button>
-                  <button className="video-control" onClick={() => navigate(1)} disabled={activeIndex >= entries.length - 1} aria-label="Next video"><NextIcon /></button>
-                  <button className="video-control" aria-label={`Repeat video: ${repeat}`} aria-pressed={repeat !== 'off'} onClick={() => setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off')}>Repeat: {repeat}</button>
-                  <label className="video-speed"><span className="sr-only">Playback speed</span><select aria-label="Playback speed" value={rate} onChange={(e) => { const v = Number(e.target.value); setRate(v); if (videoRef.current) videoRef.current.playbackRate = v }}>{[0.5,0.75,1,1.25,1.5,2].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}</select></label>
-                  <div className="video-right-controls">
-                    <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d={muted || volume === 0 ? "M16 9l6 6m0-6-6 6" : "M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"} /></svg></button>
-                    <label className="video-volume-control"><input className="video-volume" style={{ "--volume-fill": `${(muted ? 0 : volume) * 100}%` } as CSSProperties} aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
-                    <button className="video-control" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={expanded ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} /></svg></button>
+                  <button className="video-control video-control--desktop" onClick={() => seek(time + 10)} aria-label="Forward video 10 seconds"><Forward10Icon /></button>
+                  <button className="video-control video-control--desktop" onClick={() => navigate(1)} disabled={activeIndex >= entries.length - 1} aria-label="Next video"><NextIcon /></button>
+                  <button ref={queueToggleRef} className="video-control video-playlist-toggle" aria-label={queueOpen ? 'Hide playlist' : 'Show playlist'} aria-controls="video-playlist" aria-expanded={queueOpen} onClick={toggleQueue}><PlaylistIcon /><span>Playlist ({entries.length})</span></button>
+                  <button ref={settingsToggleRef} className="video-control video-settings-toggle" aria-label="Video settings" aria-controls="video-options" aria-expanded={settingsOpen} onClick={() => { setSettingsOpen(!settingsOpen); setQueueOpen(false); wake() }}><SettingsIcon /></button>
+                  <div id="video-options" className={`video-options${settingsOpen ? ' video-options--open' : ''}`}>
+                    <button className="video-control" aria-label={`Repeat video: ${repeat}`} aria-pressed={repeat !== 'off'} onClick={() => setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off')}>Repeat: {repeat}</button>
+                    <label className="video-speed"><span className="sr-only">Playback speed</span><select aria-label="Playback speed" value={rate} onChange={(e) => { const v = Number(e.target.value); setRate(v); if (videoRef.current) videoRef.current.playbackRate = v }}>{[0.5,0.75,1,1.25,1.5,2].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}</select></label>
+                    <div className="video-right-controls">
+                      <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d={muted || volume === 0 ? "M16 9l6 6m0-6-6 6" : "M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"} /></svg></button>
+                      <label className="video-volume-control"><input className="video-volume" style={{ "--volume-fill": `${(muted ? 0 : volume) * 100}%` } as CSSProperties} aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
+                    </div>
                   </div>
+                  <button className="video-control video-fullscreen-toggle" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={expanded ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} /></svg></button>
                 </div>
               </div>
             </div>
@@ -281,15 +295,15 @@ export default function VideoScreen() {
         ) : (
           <div className="video-empty"><VideoIcon width={56} height={56} /><h2>Your videos, right here</h2><p>Choose videos from this device or a connected drive to build a playlist.</p><button className="btn" onClick={() => inputRef.current?.click()}>Choose videos</button></div>
         )}
-        {queueOpen && file && <aside className="video-queue" aria-label="Video playlist"><div className="video-queue-heading"><h2>Playlist</h2><button className="video-control" onClick={() => setQueueOpen(false)} aria-label="Close playlist"><XIcon /></button></div>
+        {queueOpen && file && <aside id="video-playlist" className="video-queue" aria-label="Video playlist"><div className="video-queue-heading"><h2>Playlist</h2><button className="video-control" onClick={closeQueue} aria-label="Close playlist"><XIcon /></button></div>
           <button className="btn" onClick={() => inputRef.current?.click()}><PlusIcon /> Add videos</button>
           <ol>{entries.map((entry, i) => <li key={entry.id} className={`${entry.id === activeId ? 'is-active' : ''}${progress[entry.id]?.completed ? ' is-watched' : ''}`}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}{progress[entry.id]?.completed && <small className="video-watched-label">✓ Watched</small>}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
         </aside>}
         {error && <p className="video-error" role="alert">{error}</p>}
       </div>
-      {file && <div className="video-details"><div><h2>{file.name}</h2><p>{activeIndex + 1} of {entries.length} · {(file.size / 1024 / 1024).toFixed(1)} MB</p></div><button className="btn" onClick={() => { setQueueOpen(!queueOpen); wake() }}>Show playlist</button></div>}
+      {file && <div className="video-details"><div><h2>{file.name}</h2><p>{activeIndex + 1} of {entries.length} · {(file.size / 1024 / 1024).toFixed(1)} MB</p></div></div>}
       {storageError && <div className="video-storage-error" role="alert"><p>{storageError}</p><button className="btn" disabled={saving} onClick={() => void retrySave()}>{saving ? 'Saving…' : 'Retry saving'}</button></div>}
-      <p className="video-note">Videos are saved on this device for next time. Your playlist, watched videos and playback positions are remembered. Clearing browser data removes saved videos. During playback, controls hide automatically; move the pointer or tap the video to show them.</p>
+      <p className="video-note">Videos are saved on this device for next time. Your playlist, watched videos and playback positions are remembered. Clearing browser data removes saved videos. On phones, the playlist and settings open below the video. Double-tap the left or right side to skip ten seconds. In fullscreen, tap the video to reveal hidden controls.</p>
     </main>
   )
 }
