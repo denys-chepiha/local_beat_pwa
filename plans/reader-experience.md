@@ -20,4 +20,4 @@ Page navigation shows a short horizontal transition (180 ms); no animation on st
 pnpm test; pnpm build; git diff --check. Browser checks: phone/tablet, fullscreen exit, pinch and pan at 300%, multi-touch never turns pages, inline name focus/save/cancel, Reader offline and production CSP. Record real-device limitations separately.
 
 ## Result
-Implemented and verified; review evidence: docs/review-reader-experience-2026-10-23.md. Commit/push/deployment approved on 2026-10-23. Production verification and physical-device checks remain.
+Implemented, merged into main, pushed and deployed on 2026-10-23 after user approval (code 2f3af23). Production verification passed; evidence: docs/review-reader-experience-2026-10-23.md. Physical-device checks remain.

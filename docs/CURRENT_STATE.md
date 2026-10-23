@@ -1,21 +1,20 @@
 # Current state — 2026-10-23
 
-Released to production on 2026-10-23 at https://local-beat-pwa.vercel.app (code commit a071dec):
+Released to production on 2026-10-23 at https://local-beat-pwa.vercel.app (code commit 2f3af23):
 - Music / Audio Books / Reader / Video navigation, with Music selected at startup and independent audio session restoration.
 - Persistent local book library with cover cards and the approved document formats.
-- Paged/swipe and continuous reading, page jump/progress, search, contents, bookmarks, fullscreen, reading tones and type/zoom controls.
-- Shared progress/volume slider across audio, video and reading controls.
-- Lazy screens/parsers, bounded document rendering, fewer storage writes, batch queue removal and import cancellation/correctness fixes.
+- Paged/swipe and continuous reading, page jump, search, contents, bookmarks, reading tones and type/zoom controls. Reader actions use icons; the reader has no progress slider.
+- Immersive reader fullscreen with a bottom-right exit control, pinch zoom/text sizing, high-zoom panning and reduced-motion-aware page turns.
+- Shared progress/volume slider across audio and video controls; inline playlist naming with input focus during the initiating tap.
+- Lazy screens/per-format parsers, bounded document rendering and adjacent PDF reuse, fewer storage writes, batch queue removal and import cancellation/correctness fixes.
 - Bounded/sanitized local document handling and production security policy updates.
 
-Verification: `pnpm test` (264 tests), `pnpm build`, `pnpm audit` (zero known advisories), `git diff --check`; Chromium format/reading/offline checks and scoped WebKit rendering checks passed. Initial JavaScript is about 14% smaller than the base commit. Evidence and limitations: docs/review-2026-10-23.md.
+Verification: `pnpm test` (275 tests in 33 files), `pnpm build`, `pnpm audit` (zero known advisories), `git diff --check`; Chromium format/reading/gesture/offline checks and scoped WebKit rendering checks passed. Current measurements and limitations: docs/review-reader-experience-2026-10-23.md. Previous release evidence: docs/review-2026-10-23.md.
 
 Inherited video persistence is recorded in docs/decisions/ADR-0004-existing-video-persistence.md. Physical iPad file persistence and installed-PWA behavior still require device testing.
 
-Reader changes and the latest mobile video fixes are merged into main and pushed. Vercel production build passed; live security headers, manifest identity and service-worker content match the tested build. Production Reader format/import/search/resume/offline checks and video playback, mobile panels and file persistence passed. Previous-to-current service-worker activation, saved-video preservation and offline reload passed against local production builds.
+Reader experience changes are merged into main and pushed. Vercel production deployment is Ready; live security headers, manifest identity, entry bundle and service-worker content match the tested build. Live isolated Chromium checks passed for all eight format imports, inline playlist naming, icon controls, fullscreen, PDF navigation, pinch, touch panning at 300%, image zoom and offline text reload, without page exceptions. Previous release video/update verification remains recorded in docs/review-2026-10-23.md.
 
 Next: complete the remaining device checks in docs/ROADMAP.md.
 
-## Pending reader experience changes
-
-Implemented on fix/reader-experience, pending commit/release approval: icon actions without a reading progress slider, immersive fullscreen exit, pinch zoom/text size, panning at high zoom, page motion, bounded adjacent PDF caching, per-format parser loading and inline New Playlist input. Verification and performance limits: docs/review-reader-experience-2026-10-23.md. Production remains the preceding release.
+Physical iPhone/iPad keyboard, gestures and installed fullscreen still require device checks. Unsupported iPhone Safari versions retain browser chrome; fullscreen API support and the installed PWA viewport determine the available screen area.

@@ -1,7 +1,7 @@
 # Reader interaction verification — 2026-10-23
 
 ## Scope
-Branch fix/reader-experience from 3f71cca. Commit, push and deployment approved; release verification is in progress. Reader chrome, fullscreen, PDF/image pinch and panning, text-size pinch, page animation, converter loading and inline playlist naming. No dependency additions, storage migrations or user-profile data clearing.
+Branch fix/reader-experience from 3f71cca. User-approved code commit 2f3af23 is merged into main, pushed and deployed. Reader chrome, fullscreen, PDF/image pinch and panning, text-size pinch, page animation, converter loading and inline playlist naming. No dependency additions, storage migrations or user-profile data clearing.
 
 ## Changes and checks
 - Removed reading progress slider; retained page number/jump outside fullscreen. Named icon actions preserve accessible labels and 44px targets.
@@ -33,5 +33,10 @@ Chromium with production CSP and an isolated profile: imported all eight existin
 
 WebKit: inline input focus, text page navigation/resume, swipe/keyboard, continuous scrolling/search, fullscreen exit, PDF/EPUB rendering and opaque-frame CSP isolation passed. Files were supplied through the established isolated in-memory IDB get adapter; this does not certify WebKit Blob persistence. Blocked injected-script console messages are expected negative security tests.
 
+## Production release
+Vercel deployment local-beat-eakjtuy81-denys-chepihas-projects.vercel.app reached Ready and serves https://local-beat-pwa.vercel.app. Live response headers match vercel.json; the entry bundle and service-worker body match the tested production build; the manifest identity remains /local-beat.
+
+An isolated Chromium profile repeated all eight fixture imports, inline playlist focus/creation, icon toolbar and absence of the reading slider, fullscreen layout/exit, PDF navigation, native two-finger pinch, separate horizontal/vertical touch panning at 300% without a page turn, image zoom/pan geometry, text-size pinch and offline text reload. All passed without page exceptions. No existing user browser profile or data was modified.
+
 ## Remaining limitations
-Physical iPhone/iPad testing is still required for keyboard appearance, gestures, installed PWA safe areas and persistence. On unsupported iPhone Safari versions, the website cannot remove browser chrome; standalone installation provides the application viewport without browser toolbars. No production deployment was performed for this branch.
+Physical iPhone/iPad testing is still required for keyboard appearance, gestures, installed PWA safe areas and persistence. On unsupported iPhone Safari versions, the website cannot remove browser chrome; standalone installation provides the application viewport without browser toolbars.

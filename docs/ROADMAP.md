@@ -49,7 +49,7 @@ Dependencies: current renderers and browser APIs. Risks: iPhone fullscreen limit
 - [x] Add bounded PDF reuse, per-format loading and inline playlist name entry.
 - [x] Verify tests/build, Chromium gestures and WebKit reading; record measured limits.
 - [x] Obtain commit/release approval (2026-10-23).
-- [ ] Complete production deployment and live verification.
+- [x] Complete production deployment and live verification (code 2f3af23, 2026-10-23).
 - [ ] Verify physical iPhone/iPad keyboard, gestures and installed fullscreen.
 
 Definition of Done: pnpm test, pnpm build, git diff --check, browser evidence in docs/review-reader-experience-2026-10-23.md.
