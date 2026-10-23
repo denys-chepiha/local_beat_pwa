@@ -1,4 +1,6 @@
 // Core
+import Dexie from 'dexie'
+import { waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 async function freshSession() {
@@ -73,7 +75,7 @@ describe('persistent video session', () => {
   it('retries an unsuccessful addition when the next playlist change succeeds', async () => {
     const { db, useVideoSession } = await freshSession()
     const store = useVideoSession.getState()
-    vi.spyOn(db.videoFiles, 'bulkPut').mockRejectedValueOnce(new Error('Quota exceeded'))
+    vi.spyOn(db.videoFiles, 'put').mockRejectedValueOnce(new Error('Quota exceeded'))
     await store.setEntries([entry(1)])
     expect(useVideoSession.getState().storageError).toBeTruthy()
     expect(useVideoSession.getState().entries.map((e) => e.id)).toEqual([1])
@@ -108,4 +110,46 @@ describe('persistent video session', () => {
     expect(read).toHaveBeenCalledTimes(1)
     expect(useVideoSession.getState().loaded).toBe(true)
   })
+})
+
+
+it('keeps successful saves when one file fails and retries the missing file', async () => {
+  const { db, useVideoSession } = await freshSession()
+  await db.videoFiles.clear()
+  useVideoSession.setState({ entries: [], storageError: null })
+  const put = db.videoFiles.put.bind(db.videoFiles)
+  let fail = true
+  const spy = vi.spyOn(db.videoFiles, 'put').mockImplementation((entry) => {
+    if (entry.id === 903 && fail) return Dexie.Promise.reject(new DOMException('Full', 'QuotaExceededError'))
+    return put(entry)
+  })
+  try {
+    const store = useVideoSession.getState()
+    store.setEntries([902, 903].map((id) => ({ id, file: new File(['video'], `${id}.mp4`) })))
+    await waitFor(() => expect(useVideoSession.getState().storageError).toContain('Device storage is full'))
+    expect(await db.videoFiles.get(902)).toBeDefined()
+    expect(await db.videoFiles.get(903)).toBeUndefined()
+    fail = false
+    await store.retrySave()
+    expect(await db.videoFiles.count()).toBe(2)
+    expect(useVideoSession.getState().storageError).toBeNull()
+    expect(spy.mock.calls.filter(([entry]) => entry.id === 902)).toHaveLength(1)
+    store.setEntries([])
+    await waitFor(async () => expect(await db.videoFiles.count()).toBe(0))
+  } finally { spy.mockRestore() }
+})
+
+
+it('serializes overlapping playlist changes and does not retain an older save error', async () => {
+  const { db, useVideoSession } = await freshSession()
+  const store = useVideoSession.getState()
+  vi.spyOn(db.videoFiles, 'put').mockRejectedValueOnce(new Error('Temporary failure'))
+  const first = store.setEntries([entry(1)])
+  const second = store.setEntries((entries) => [...entries, entry(2)])
+  const third = store.setEntries([entry(2)])
+  await Promise.all([first, second, third])
+  expect(await db.videoFiles.toCollection().primaryKeys()).toEqual([2])
+  expect(useVideoSession.getState().entries.map((entry) => entry.id)).toEqual([2])
+  expect(useVideoSession.getState().storageError).toBeNull()
+  expect(useVideoSession.getState().saving).toBe(false)
 })

@@ -16,6 +16,8 @@ interface VideoSession {
   progress: Record<number, Progress>
   loaded: boolean
   storageError: string | null
+  saving: boolean
+  retrySave: () => Promise<void>
   hydrate: () => Promise<void>
   setEntries: (next: SetStateAction<VideoEntry[]>) => Promise<void>
   setActiveId: (id: number | null) => void
@@ -32,7 +34,7 @@ let progressTimer: ReturnType<typeof setTimeout> | null = null
 const pendingProgress = new Map<number, Progress>()
 
 export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
-  entries: [], activeId: null, progress: {}, loaded: false, storageError: null,
+  entries: [], activeId: null, progress: {}, loaded: false, storageError: null, saving: false,
 
   hydrate: () => {
     if (get().loaded) return Promise.resolve()
@@ -55,6 +57,8 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     return hydration
   },
 
+  retrySave: () => get().setEntries((entries) => entries),
+
   setEntries: (next) => {
     get().flushProgress()
     const entries = typeof next === 'function' ? next(get().entries) : next
@@ -63,21 +67,36 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     // Diff the committed database, not the optimistic UI: a later retry must
     // include files from any earlier failed addition.
     writes = writes.then(async () => {
+      set({ saving: true })
       try {
-        await db.transaction('rw', db.videoFiles, async () => {
-          const existingIds = await db.videoFiles.toCollection().primaryKeys()
-          const existing = new Set(existingIds)
-          const wanted = new Set(entries.map((entry) => entry.id))
-          const removed = existingIds.filter((id) => !wanted.has(id))
-          const added = entries.filter((entry) => !existing.has(entry.id))
-          if (removed.length) await db.videoFiles.bulkDelete(removed)
-          if (added.length) await db.videoFiles.bulkPut(added)
-        })
-        savedEntries = entries
+        const existingIds = await db.videoFiles.toCollection().primaryKeys()
+        const existing = new Set(existingIds)
+        const wanted = new Set(entries.map((entry) => entry.id))
+        const removed = existingIds.filter((id) => !wanted.has(id))
+        if (removed.length) await db.videoFiles.bulkDelete(removed)
+        const failures: { name: string; error: unknown }[] = []
+        for (const entry of entries) {
+          if (existing.has(entry.id)) continue
+          try { await db.videoFiles.put(entry) }
+          catch (error) { failures.push({ name: entry.file.name, error }) }
+        }
+        savedEntries = await db.videoFiles.toArray()
         if (version === mutationVersion) {
           const ids = new Set(entries.map((entry) => entry.id))
           const progress = Object.fromEntries(Object.entries(get().progress).filter(([id]) => ids.has(Number(id))))
-          set({ progress, storageError: null })
+          let storageError: string | null = null
+          if (failures.length) {
+            const first = failures[0]
+            const error = first.error as { name?: string; inner?: { name?: string } }
+            const kind = error?.inner?.name ?? error?.name ?? 'StorageError'
+            const reason = kind === 'QuotaExceededError'
+              ? 'Device storage is full. Remove saved videos you no longer need, then retry.'
+              : kind === 'NotReadableError' || kind === 'DataCloneError'
+                ? 'The selected file could not be copied. Download it to this device first, then remove and add it again.'
+                : `Local storage could not complete the save (${kind}). Retry when the app is in the foreground.`
+            storageError = `${failures.length} video(s) not saved for next time: ${first.name}. ${reason} You can keep watching in this session.`
+          }
+          set({ progress, storageError })
         }
       } catch {
         if (version === mutationVersion) {
@@ -85,10 +104,10 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
           // whose deletion failed, so the visible playlist reflects that failure.
           const ids = new Set(entries.map((entry) => entry.id))
           const restored = [...entries, ...savedEntries.filter((entry) => !ids.has(entry.id))]
-          set({ entries: restored, activeId: get().activeId ?? restored[0]?.id ?? null })
+          set({ entries: restored, activeId: get().activeId ?? restored[0]?.id ?? null,
+            storageError: 'Video changes could not be saved. Check device storage and retry saving.' })
         }
-        set({ storageError: 'Video changes could not be saved. Check device storage and try adding or removing the files again.' })
-      }
+      } finally { set({ saving: false }) }
     })
     return writes
   },
