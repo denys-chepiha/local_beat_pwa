@@ -359,3 +359,120 @@ it('restores audio metadata after video and treats repeated system pause as paus
     vi.unstubAllGlobals()
   }
 })
+
+describe('batch music removal', () => {
+  it('removes a large inactive queue in one persistence write and keeps the current index', async () => {
+    const { db, usePlayerStore } = await freshModules()
+    const ids = Array.from({ length: 5000 }, (_, index) => `track-${index}`)
+    usePlayerStore.setState({ musicQueue: ids, currentTrackId: ids[4999], musicQueueIndex: 4999 })
+    const write = vi.spyOn(db.playerState, 'put')
+    usePlayerStore.getState().handleTracksRemoved(ids.slice(0, 4999))
+    expect(usePlayerStore.getState().musicQueue).toEqual([ids[4999]])
+    expect(usePlayerStore.getState().musicQueueIndex).toBe(0)
+    expect(write).toHaveBeenCalledTimes(1)
+    usePlayerStore.getState().handleTracksRemoved(['not-in-queue'])
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases the active song and saves the cleared session once', async () => {
+    const { db, useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 3)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    const write = vi.spyOn(db.playerState, 'put')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    usePlayerStore.getState().handleTracksRemoved(tracks.map((track) => track.id))
+    expect(usePlayerStore.getState()).toMatchObject({ musicQueue: [], currentTrackId: null, isPlaying: false, nowPlaying: null })
+    expect(document.querySelector('audio')!.getAttribute('src')).toBeNull()
+    expect(revoke).toHaveBeenCalled()
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the inactive music pointer without changing active audiobook playback', async () => {
+    const { db, usePlayerStore } = await freshModules()
+    const metadata = { title: 'Book', subtitle: 'Chapter', label: 'Book', kind: 'audiobook' as const }
+    usePlayerStore.setState({ source: 'audiobook', currentBookId: 'book', currentChapterId: 'chapter',
+      currentTime: 42, isPlaying: true, nowPlaying: metadata, currentTrackId: 'song',
+      musicQueue: ['song'], musicQueueIndex: 0, musicCurrentTime: 19 })
+    const write = vi.spyOn(db.playerState, 'put')
+    usePlayerStore.getState().handleTracksRemoved(['song'])
+    expect(usePlayerStore.getState()).toMatchObject({ source: 'audiobook', currentBookId: 'book',
+      currentChapterId: 'chapter', currentTime: 42, isPlaying: true, nowPlaying: metadata,
+      currentTrackId: null, musicQueue: [], musicQueueIndex: -1, musicCurrentTime: 0 })
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a pending deleted song before its storage read completes', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 1)
+    const blob = await useLibraryStore.getState().getBlob(tracks[0].id)
+    let finish!: (value: typeof blob) => void
+    vi.spyOn(useLibraryStore.getState(), 'getBlob').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const loading = usePlayerStore.getState().playPlaylist(playlist.id)
+    usePlayerStore.getState().handleTracksRemoved([tracks[0].id])
+    finish(blob)
+    await loading
+    expect(usePlayerStore.getState()).toMatchObject({ currentTrackId: null, musicQueue: [], isPlaying: false, isLoading: false })
+  })
+})
+
+
+it('keeps a pending queue target when an unrelated track is removed before it', async () => {
+  const { useLibraryStore, usePlayerStore } = await freshModules()
+  const { playlist, tracks } = await seedPlaylist(useLibraryStore, 3)
+  await usePlayerStore.getState().playPlaylist(playlist.id)
+  const blob = await useLibraryStore.getState().getBlob(tracks[1].id)
+  let finish!: (value: typeof blob) => void
+  vi.spyOn(useLibraryStore.getState(), 'getBlob').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+  const loading = usePlayerStore.getState().playPlaylist(playlist.id, tracks[1].id)
+  usePlayerStore.getState().handleTracksRemoved([tracks[2].id])
+  expect(usePlayerStore.getState().musicQueueIndex).toBe(1)
+  usePlayerStore.getState().handleTracksRemoved([tracks[1].id])
+  finish(blob)
+  await loading
+  expect(usePlayerStore.getState()).toMatchObject({ currentTrackId: null, musicQueue: [tracks[0].id], isPlaying: false, isLoading: false })
+})
+
+describe('independent remembered sessions on startup', () => {
+  it.each(['music', 'audiobook'] as const)('restores both sessions when the last active source was %s', async (source) => {
+    const { db, useLibraryStore, useAudiobookStore, usePlayerStore } = await freshModules({ skipPlayerInit: true })
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 2)
+    const book = await useAudiobookStore.getState().importBook({ title: 'Remembered book', fingerprint: `restore-${source}`,
+      chapters: [1, 2].map((number) => ({ file: new File(['audio'], `chapter-${number}.mp3`), title: `Chapter ${number}`, duration: 120 })),
+    })
+    const chapters = useAudiobookStore.getState().getChapters(book.id)
+    await useAudiobookStore.getState().saveChapterProgress(book.id, chapters[1].id, { position: 22 })
+    await db.playerState.put({ id: 'player', source, volume: 1, shuffleEnabled: false, repeatMode: 'off',
+      currentPlaylistId: playlist.id, currentTrackId: tracks[1].id, currentTime: 45,
+      queue: tracks.map((track) => track.id), queueIndex: 1, currentBookId: book.id })
+
+    await usePlayerStore.getState().init()
+    expect(usePlayerStore.getState()).toMatchObject({ currentTrackId: tracks[1].id, musicCurrentTime: 45, musicQueueIndex: 1,
+      currentBookId: book.id, currentChapterId: chapters[1].id, currentChapterIndex: 1, bookQueueIndex: 1 })
+    await usePlayerStore.getState().restoreSource('music')
+    expect(usePlayerStore.getState()).toMatchObject({ source: 'music', currentTime: 45, nowPlaying: { title: tracks[1].title, kind: 'music' }, isPlaying: false })
+    expect(useAudiobookStore.getState().getBook(book.id)).toMatchObject({ currentChapterId: chapters[1].id, currentTime: 22, playCount: 0 })
+    await usePlayerStore.getState().restoreSource('audiobook')
+    expect(usePlayerStore.getState()).toMatchObject({ source: 'audiobook', currentTime: 22, musicCurrentTime: 45,
+      currentTrackId: tracks[1].id, nowPlaying: { title: 'Chapter 2', kind: 'audiobook' }, isPlaying: false })
+  })
+
+  it.each([null, 'deleted-track'])('switches to empty music when its remembered track is %s without losing the book', async (currentTrackId) => {
+    const { db, useAudiobookStore, usePlayerStore } = await freshModules({ skipPlayerInit: true })
+    const book = await useAudiobookStore.getState().importBook({ title: 'Only book', fingerprint: `empty-${currentTrackId}`,
+      chapters: [{ file: new File(['audio'], 'chapter.mp3'), title: 'Chapter', duration: 120 }],
+    })
+    const chapter = useAudiobookStore.getState().getChapters(book.id)[0]
+    await useAudiobookStore.getState().saveChapterProgress(book.id, chapter.id, { position: 37 })
+    await db.playerState.put({ id: 'player', source: 'audiobook', volume: 1, shuffleEnabled: false, repeatMode: 'off',
+      currentPlaylistId: null, currentTrackId, currentTime: 45, queue: currentTrackId ? [currentTrackId] : [], queueIndex: 0, currentBookId: book.id })
+    await usePlayerStore.getState().init()
+    expect(usePlayerStore.getState().nowPlaying?.kind).toBe('audiobook')
+    await usePlayerStore.getState().restoreSource('music')
+    expect(usePlayerStore.getState()).toMatchObject({ source: 'music', currentTrackId: null, currentTime: 0, nowPlaying: null, canResume: false,
+      currentBookId: book.id, currentChapterId: chapter.id, isPlaying: false })
+    expect(document.querySelector('audio')!.getAttribute('src')).toBeNull()
+    expect(useAudiobookStore.getState().getBook(book.id)?.currentTime).toBe(37)
+    await usePlayerStore.getState().restoreSource('audiobook')
+    expect(usePlayerStore.getState()).toMatchObject({ source: 'audiobook', currentTime: 37, nowPlaying: { kind: 'audiobook' } })
+  })
+})

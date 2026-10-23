@@ -7,13 +7,14 @@ import { useVideoSession } from './useVideoSession'
 // Services
 import { usePlayerStore } from '@/store/usePlayerStore'
 
-beforeEach(() => {
-  useVideoSession.setState({ entries: [], activeId: null })
+beforeEach(async () => {
+  await useVideoSession.getState().setEntries([])
+  useVideoSession.setState({ entries: [], activeId: null, progress: {}, loaded: true, storageError: null })
   usePlayerStore.setState({ pause: vi.fn() })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => `blob:${(blob as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL')
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); await useVideoSession.getState().setEntries([]) })
 const choose = (...names: string[]) => fireEvent.change(screen.getByLabelText('Choose video files'), {
   target: { files: names.map((name) => new File(['video'], name, { type: name.endsWith('.txt') ? 'text/plain' : 'video/mp4' })) },
 })
@@ -146,4 +147,32 @@ it('shows preview only after holding for one second and commits on release', () 
   fireEvent.pointerUp(slider)
   expect(video.currentTime).toBe(65)
   expect(screen.queryByLabelText('Video preview')).toBeNull()
+})
+
+
+it('flushes the current position on pause, seek and pagehide', () => {
+  const { container } = render(<VideoScreen />)
+  choose('flush.mp4')
+  const video = container.querySelector('video')!
+  metadata(video)
+  const id = useVideoSession.getState().activeId!
+  video.currentTime = 17
+  fireEvent.pause(video)
+  expect(useVideoSession.getState().progress[id].time).toBe(17)
+  fireEvent.change(screen.getByRole('slider', { name: 'Seek video' }), { target: { value: 23 } })
+  expect(useVideoSession.getState().progress[id].time).toBe(23)
+  video.currentTime = 31
+  fireEvent(window, new Event('pagehide'))
+  expect(useVideoSession.getState().progress[id].time).toBe(31)
+})
+
+it('prevents additions until saved videos are restored', async () => {
+  let finish!: () => void
+  useVideoSession.setState({ loaded: false })
+  vi.spyOn(useVideoSession.getState(), 'hydrate').mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+  render(<VideoScreen />)
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your videos')
+  expect(screen.queryByLabelText('Choose video files')).toBeNull()
+  await act(async () => { useVideoSession.setState({ loaded: true }); finish() })
+  expect(screen.getByLabelText('Choose video files')).toBeInTheDocument()
 })

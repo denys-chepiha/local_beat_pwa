@@ -1,6 +1,7 @@
 // Core
 import { useEffect, useRef, useState } from 'react'
 // Components
+import ProgressSlider from '@/components/ProgressSlider/ProgressSlider'
 import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, XIcon, VolumeIcon } from '@/components/Icons'
 // Services
 import { usePlayerStore } from '@/store/usePlayerStore'
@@ -12,7 +13,7 @@ import VideoSeek from './VideoSeek'
 import './VideoScreen.css'
 
 export default function VideoScreen() {
-  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, storageError } = useVideoSession()
+  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, flushProgress, storageError, loaded, hydrate } = useVideoSession()
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
@@ -30,6 +31,7 @@ export default function VideoScreen() {
   const lastVolume = useRef(1)
   const [controlsFocused, setControlsFocused] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const loadedEntryId = useRef<number | null>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const nextId = useRef(Math.max(0, ...entries.map((entry) => entry.id)))
@@ -41,6 +43,20 @@ export default function VideoScreen() {
   const supportsVolume = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
   const wake = () => { setControlsVisible(true); setActivity((n) => n + 1) }
 
+  useEffect(() => { void hydrate() }, [hydrate])
+  useEffect(() => {
+    const flush = () => {
+      const video = videoRef.current
+      if (video && video.readyState >= 1 && loadedEntryId.current !== null) {
+        saveProgress(loadedEntryId.current, video.currentTime, video.ended)
+      }
+      flushProgress()
+    }
+    const hide = () => { if (document.hidden) flush() }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', hide)
+    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', hide); flush() }
+  }, [saveProgress, flushProgress])
   useEffect(() => { pauseAudio(); return () => { if (audioGraph.current) { void audioGraph.current.context.close(); audioGraph.current = null } } }, [pauseAudio])
   useEffect(() => {
     if (!playing || queueOpen || controlsFocused || scrubbing) { setControlsVisible(true); return }
@@ -64,11 +80,14 @@ export default function VideoScreen() {
     const video = videoRef.current
     if (!file || !video) return
     setTime(useVideoSession.getState().progress[activeId!]?.time ?? 0); setDuration(0); setPlaying(false); setError(null); wake()
+    loadedEntryId.current = activeId
     const url = URL.createObjectURL(file)
     video.src = url
     video.load()
     return () => {
       if (video.readyState >= 1 && activeId !== null) saveProgress(activeId, video.currentTime, video.ended)
+      flushProgress()
+      loadedEntryId.current = null
       video.pause()
       video.removeAttribute('src')
       video.load()
@@ -126,6 +145,8 @@ export default function VideoScreen() {
     if (!videoRef.current || !Number.isFinite(target) || duration <= 0) return
     videoRef.current.currentTime = Math.max(0, Math.min(duration, target))
     setTime(videoRef.current.currentTime)
+    if (activeId !== null) saveProgress(activeId, videoRef.current.currentTime)
+    flushProgress()
     wake()
   }
   const select = (id: number, shouldPlay = true) => {
@@ -159,12 +180,16 @@ export default function VideoScreen() {
       setActiveId(remaining[Math.min(activeIndex, remaining.length - 1)]?.id ?? null)
       if (!remaining.length) { setExpanded(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}) }
     }
-    setEntries(remaining)
+    void setEntries(remaining)
   }
   const library = () => {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
     goHome()
   }
+
+  if (!loaded) return <main className="video-screen"><header className="topbar"><h1>Video</h1></header>
+    {storageError ? <><p role="alert">{storageError}</p><button className="btn" onClick={() => void hydrate()}>Retry</button></> : <p role="status">Loading your videos…</p>}
+  </main>
 
   return (
     <main className="video-screen">
@@ -192,7 +217,7 @@ export default function VideoScreen() {
             const valid = selected.filter((f) => f.size > 0 && (f.type.startsWith('video/') || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(f.name)))
             const additions = valid.filter((f) => !entries.some((entry) => entry.file.name === f.name && entry.file.size === f.size && entry.file.lastModified === f.lastModified))
               .map((f) => ({ id: nextId.current = Math.max(Date.now(), nextId.current + 1), file: f }))
-            setEntries((current) => [...current, ...additions])
+            void setEntries((current) => [...current, ...additions])
             if (!file && additions[0]) { autoplay.current = false; setActiveId(additions[0].id) }
             setError(valid.length < selected.length ? 'Some files were skipped. Choose non-empty video files.' : null)
           }} />
@@ -210,7 +235,11 @@ export default function VideoScreen() {
               }}
               onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
               onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
-              onPlay={() => { handoff(); setPlaying(true); setError(null) }} onPause={() => setPlaying(false)}
+              onPlay={() => { handoff(); setPlaying(true); setError(null) }} onPause={(event) => {
+                setPlaying(false)
+                if (loadedEntryId.current !== null && event.currentTarget.readyState >= 1) saveProgress(loadedEntryId.current, event.currentTarget.currentTime)
+                flushProgress()
+              }}
               onEnded={() => {
                 setPlaying(false)
                 if (activeId !== null) saveProgress(activeId, duration, true)
@@ -239,7 +268,7 @@ export default function VideoScreen() {
                   <label className="video-speed"><span className="sr-only">Playback speed</span><select aria-label="Playback speed" value={rate} onChange={(e) => { const v = Number(e.target.value); setRate(v); if (videoRef.current) videoRef.current.playbackRate = v }}>{[0.5,0.75,1,1.25,1.5,2].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}</select></label>
                   <div className="video-right-controls">
                     <button className={`video-control${muted || volume === 0 ? ' video-control--muted' : ''}`} aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'} aria-pressed={muted || volume === 0} onClick={toggleMute}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H3v6h3l5 4Z M16 9l6 6m0-6-6 6" /></svg></button>
-                    <label className="video-volume-control"><VolumeIcon width={18} height={18} /><input className="video-volume" aria-label="Video volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
+                    <label className="video-volume-control"><VolumeIcon width={18} height={18} /><ProgressSlider className="video-volume" aria-label="Video volume" aria-valuetext={`${Math.round((muted ? 0 : volume) * 100)}%`} min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
                     <button className="video-control" onClick={() => void fullscreen()} aria-label={expanded ? 'Exit fullscreen' : 'Enter fullscreen'}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={expanded ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} /></svg></button>
                   </div>
                 </div>

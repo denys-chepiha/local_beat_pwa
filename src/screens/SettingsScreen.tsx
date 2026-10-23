@@ -23,7 +23,7 @@ export default function SettingsScreen() {
   const chaptersByBook = useAudiobookStore((s) => s.chaptersByBook)
   const clearAllBooks = useAudiobookStore((s) => s.clearAllBooks)
   const player = usePlayerStore((s) => ({ source: s.source, nowPlaying: s.nowPlaying,
-    stop: s.stop, handleTrackRemoved: s.handleTrackRemoved, handleBookRemoved: s.handleBookRemoved,
+    handleTracksRemoved: s.handleTracksRemoved, handleBookRemoved: s.handleBookRemoved,
   }), shallow)
   const { goHome, showToast } = useUiStore()
   const [confirm, setConfirm] = useState<ConfirmKind>(null)
@@ -43,8 +43,7 @@ export default function SettingsScreen() {
       : null
 
   const stopEverything = () => {
-    if (player.source === 'music') player.stop()
-    Object.keys(tracks).forEach((id) => player.handleTrackRemoved(id))
+    player.handleTracksRemoved(Object.keys(tracks))
   }
 
   const stopAudiobooks = () => {

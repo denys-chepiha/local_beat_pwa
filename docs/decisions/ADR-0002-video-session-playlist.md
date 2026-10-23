@@ -1,7 +1,7 @@
 # ADR-0002: Session video playlist and fullscreen controls
 
 ## Status
-Accepted; supersedes the single-file/native-controls portion of ADR-0001.
+Storage superseded by ADR-0004; fullscreen/control decision retained. Originally superseded the single-file/native-controls portion of ADR-0001.
 
 ## Date
 2026-10-22

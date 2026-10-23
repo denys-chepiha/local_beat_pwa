@@ -1,5 +1,7 @@
+// Core
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import jsmediatags from 'jsmediatags'
+// Utils
 import { extractMetadata, isAudioFile, readAudioDuration } from '@/utils/audioFile'
 
 vi.mock('jsmediatags', () => ({ default: { read: vi.fn() } }))
@@ -15,6 +17,50 @@ afterEach(() => {
 })
 
 describe('audio file import metadata', () => {
+  it('does not open an audio resource for an already aborted read', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const create = vi.spyOn(URL, 'createObjectURL')
+
+    expect(await readAudioDuration(new File(['audio'], 'song.mp3'), controller.signal)).toBe(0)
+    expect(create).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('releases a pending duration probe as soon as its signal is aborted', async () => {
+    const controller = new AbortController()
+    const create = vi.spyOn(document, 'createElement')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    const load = vi.spyOn(HTMLMediaElement.prototype, 'load')
+    const result = readAudioDuration(new File(['audio'], 'song.mp3'), controller.signal)
+    const audio = create.mock.results.find((result) => result.value instanceof HTMLAudioElement)!.value as HTMLAudioElement
+    const url = audio.src
+
+    controller.abort()
+
+    expect(await result).toBe(0)
+    expect(audio.onloadedmetadata).toBeNull()
+    expect(audio.onerror).toBeNull()
+    expect(audio.hasAttribute('src')).toBe(false)
+    expect(revoke).toHaveBeenCalledExactlyOnceWith(url)
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('settles both metadata readers on cancellation without waiting for their timeouts', async () => {
+    const controller = new AbortController()
+    const result = extractMetadata(new File(['audio'], 'Canceled.mp3'), controller.signal)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(jsmediatags.read).toHaveBeenCalledTimes(1)
+
+    controller.abort()
+
+    expect(await result).toEqual({
+      title: 'Canceled', artist: 'Unknown Artist', album: '', duration: 0, cover: undefined,
+    })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it.each(['', 'application/octet-stream'])('accepts a supported filename with provider MIME type "%s"', (type) => {
     expect(isAudioFile(new File(['audio'], 'Song.MP3', { type }))).toBe(true)
     expect(isAudioFile(new File(['audio'], 'Song.m4a', { type }))).toBe(true)

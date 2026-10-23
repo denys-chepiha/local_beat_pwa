@@ -13,6 +13,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // Keep Node's experimental Web Storage from shadowing jsdom's real Storage.
+    execArgv: ['--no-experimental-webstorage'],
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
   },

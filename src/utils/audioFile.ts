@@ -23,7 +23,8 @@ export function baseName(fileName: string): string {
 }
 
 /** Read the audio duration via a throwaway HTMLAudioElement. */
-export function readAudioDuration(file: File): Promise<number> {
+export function readAudioDuration(file: File, signal?: AbortSignal): Promise<number> {
+  if (signal?.aborted) return Promise.resolve(0)
   return new Promise((resolve) => {
     const audio = document.createElement('audio')
     let url: string | undefined
@@ -32,6 +33,7 @@ export function readAudioDuration(file: File): Promise<number> {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
       audio.onloadedmetadata = null
       audio.onerror = null
       if (url) URL.revokeObjectURL(url)
@@ -40,9 +42,11 @@ export function readAudioDuration(file: File): Promise<number> {
       // Release the media resource even when a mobile decoder has stalled.
       audio.load()
     }
+    const abort = () => finish(0)
     // Metadata is optional: mobile browsers/providers may never emit either
     // event, and that must not prevent the file from being saved.
     const timer = setTimeout(() => finish(0), METADATA_TIMEOUT_MS)
+    signal?.addEventListener('abort', abort, { once: true })
     try {
       url = URL.createObjectURL(file)
       audio.preload = 'metadata'
@@ -95,17 +99,22 @@ function cleanTag(value?: string): string | undefined {
 }
 
 /** Read ID3 / tag metadata (title, artist, album, cover art). */
-async function readTags(file: File): Promise<Partial<ExtractedMeta>> {
+async function readTags(file: File, signal?: AbortSignal): Promise<Partial<ExtractedMeta>> {
+  if (signal?.aborted) return {}
   const { default: jsmediatags } = await import('jsmediatags')
+  if (signal?.aborted) return {}
   return new Promise((resolve) => {
     let settled = false
     const finish = (tags: Partial<ExtractedMeta>) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
       resolve(tags)
     }
+    const abort = () => finish({})
     const timer = setTimeout(() => finish({}), METADATA_TIMEOUT_MS)
+    signal?.addEventListener('abort', abort, { once: true })
     try {
       jsmediatags.read(file, {
         onSuccess: ({ tags }) => {
@@ -135,8 +144,8 @@ async function readTags(file: File): Promise<Partial<ExtractedMeta>> {
 }
 
 /** Combine tag + duration metadata with sensible fallbacks. */
-export async function extractMetadata(file: File): Promise<ExtractedMeta> {
-  const [duration, tags] = await Promise.all([readAudioDuration(file), readTags(file)])
+export async function extractMetadata(file: File, signal?: AbortSignal): Promise<ExtractedMeta> {
+  const [duration, tags] = await Promise.all([readAudioDuration(file, signal), readTags(file, signal)])
   return {
     title: tags.title || baseName(file.name),
     artist: tags.artist || 'Unknown Artist',

@@ -2,6 +2,10 @@
 import '@testing-library/jest-dom/vitest'
 import 'fake-indexeddb/auto'
 
+// Node's optional Web Storage global is not the browser storage supplied by jsdom.
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: window.localStorage })
+Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: window.sessionStorage })
+
 // jsdom has no HTMLMediaElement playback engine — stub the bits the app touches
 // so play()/pause() dispatch real events (driving the store's own listeners,
 // just like a real browser) and readyState reflects a loaded source.

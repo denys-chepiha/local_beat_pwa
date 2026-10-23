@@ -13,6 +13,8 @@ describe('section navigation', () => {
     ui.switchSection('audiobooks')
     expect(useUiStore.getState().screen).toEqual({ name: 'audiobook', bookId: 'book-1' })
     await useUiStore.persist.rehydrate()
+    expect(useUiStore.getState().screen).toEqual({ name: 'home' })
+    ui.switchSection('audiobooks')
     expect(useUiStore.getState().screen).toEqual({ name: 'audiobook', bookId: 'book-1' })
   })
 })

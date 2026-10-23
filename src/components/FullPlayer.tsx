@@ -1,6 +1,7 @@
 // Core
 import { useEffect } from 'react'
 // Components
+import ProgressSlider from '@/components/ProgressSlider/ProgressSlider'
 import {
   PlayIcon,
   PauseIcon,
@@ -78,13 +79,13 @@ export default function FullPlayer() {
       </div>
 
       <div className="seek">
-        <input
-          type="range"
+        <ProgressSlider
           min={0}
           max={duration || 0}
           step={0.1}
           value={Math.min(shownTime, duration || 0)}
           aria-label="Seek track"
+          aria-valuetext={`${formatTime(shownTime)} of ${formatTime(duration)}`}
           disabled={duration <= 0 || player.isLoading || player.canResume}
           onChange={(e) => player.seek(Number(e.target.value))}
         />
@@ -139,8 +140,9 @@ export default function FullPlayer() {
       {supportsVolume && (
         <div className="volume-row">
           <VolumeIcon width={20} height={20} />
-          <input
-            type="range"
+          <ProgressSlider
+            aria-label="Volume"
+            aria-valuetext={`${Math.round(volume * 100)} percent`}
             min={0}
             max={1}
             step={0.01}

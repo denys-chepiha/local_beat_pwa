@@ -1,6 +1,5 @@
-// Core
-import { type CSSProperties } from 'react'
 // Components
+import ProgressSlider from '@/components/ProgressSlider/ProgressSlider'
 import {
   PlayIcon,
   PauseIcon,
@@ -39,7 +38,6 @@ export default function MiniPlayer() {
 
   const totalDuration = duration || 0
   const shownTime = Math.min(currentTime, totalDuration || currentTime)
-  const progress = totalDuration > 0 ? Math.min(100, (shownTime / totalDuration) * 100) : 0
   const queueIndex = source === 'music' ? musicQueueIndex : bookQueueIndex
   const queueLength = source === 'music' ? musicQueue.length : bookQueue.length
   const hasPreviousTrack = source === 'music' ? queueLength > 0 : queueIndex > 0
@@ -70,18 +68,14 @@ export default function MiniPlayer() {
         </div>
 
         <div className="mini-seek">
-          <input
-            className="mini-scrub"
-            type="range"
+          <ProgressSlider
             min={0}
             max={totalDuration}
             step={0.1}
             value={shownTime}
             disabled={totalDuration <= 0}
             aria-label="Seek track"
-            style={{
-              '--mini-progress': `${progress}%`,
-            } as CSSProperties}
+            aria-valuetext={`${formatTime(shownTime)} of ${formatTime(totalDuration)}`}
             onChange={(e) => {
               const value = Number(e.target.value)
               seekTo(value)

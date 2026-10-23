@@ -124,6 +124,7 @@ interface PlayerStore {
   stop: () => void
   resume: () => Promise<void>
   handleTrackRemoved: (trackId: string) => void
+  handleTracksRemoved: (trackIds: string[]) => void
   handleBookRemoved: (bookId: string) => void
 }
 
@@ -538,7 +539,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             }
             set({ isPlaying: false })
             if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
-            persistPlayerState()
+            if (a.src) persistPlayerState()
             if (get().source === 'audiobook') flushAudiobookProgressNow()
           })
           a.addEventListener('ended', () => {
@@ -586,68 +587,64 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             return
           }
 
+          const lib = useLibraryStore.getState()
+          const lastTrack = saved.currentTrackId ? lib.getTrack(saved.currentTrackId) : undefined
+          const playlist = saved.currentPlaylistId ? lib.getPlaylist(saved.currentPlaylistId) : undefined
+          const musicQueue = (!saved.shuffleEnabled && playlist ? playlist.trackIds : saved.queue)
+            .filter((id) => lib.getTrack(id))
+          const abStore = useAudiobookStore.getState()
+          const book = saved.currentBookId ? abStore.getBook(saved.currentBookId) : undefined
+          const chapters = book ? abStore.getChapters(book.id) : []
+          const chapterIndex = book && chapters[book.currentChapterIndex] ? book.currentChapterIndex : 0
+          const chapter = chapters[chapterIndex]
+          const source = saved.source ?? 'music'
+
           a.volume = saved.volume
+          // Both remembered sessions survive reload; only the active source
+          // determines the shared transport metadata and visible position.
           set({
             volume: saved.volume,
             shuffleEnabled: saved.shuffleEnabled,
             repeatMode: saved.repeatMode,
-            source: saved.source ?? 'music',
-            currentBookId: saved.currentBookId,
+            source,
+            currentPlaylistId: saved.currentPlaylistId,
+            currentTrackId: lastTrack?.id ?? null,
+            musicQueue,
+            musicQueueIndex: lastTrack ? musicQueue.indexOf(lastTrack.id) : -1,
+            musicCurrentTime: lastTrack ? saved.currentTime : 0,
+            currentBookId: book?.id ?? null,
+            currentChapterId: chapter?.id ?? null,
+            currentChapterIndex: chapterIndex,
+            bookQueue: chapters.map((item) => item.id),
+            bookQueueIndex: chapter ? chapterIndex : -1,
             initialized: true,
           })
 
-          if ((saved.source ?? 'music') === 'music') {
-            const lib = useLibraryStore.getState()
-            const trackExists = saved.currentTrackId && lib.getTrack(saved.currentTrackId)
-            const playlist = saved.currentPlaylistId ? lib.getPlaylist(saved.currentPlaylistId) : undefined
-            const queue = (!saved.shuffleEnabled && playlist ? playlist.trackIds : saved.queue)
-              .filter((id) => lib.getTrack(id))
+          if (source === 'music' && lastTrack) {
             set({
-              currentPlaylistId: saved.currentPlaylistId,
-              musicQueue: queue,
-              musicQueueIndex: saved.currentTrackId ? queue.indexOf(saved.currentTrackId) : -1,
+              currentTime: saved.currentTime,
+              duration: lastTrack.duration || 0,
+              canResume: true,
+              nowPlaying: {
+                title: lastTrack.title,
+                subtitle: lastTrack.artist,
+                label: lib.getPlaylist(lastTrack.playlistId)?.name ?? 'Now Playing',
+                kind: 'music',
+              },
             })
-            if (trackExists) {
-              const lastTrack = lib.getTrack(saved.currentTrackId!)!
-              const playlist = lib.getPlaylist(lastTrack.playlistId)
-              set({
-                currentTrackId: saved.currentTrackId,
-                currentTime: saved.currentTime,
-                musicCurrentTime: saved.currentTime,
-                duration: lastTrack.duration || 0,
-                canResume: true,
-                nowPlaying: {
-                  title: lastTrack.title,
-                  subtitle: lastTrack.artist,
-                  label: playlist?.name ?? 'Now Playing',
-                  kind: 'music',
-                },
-              })
-            }
-          } else if (saved.currentBookId) {
-            const abStore = useAudiobookStore.getState()
-            const book = abStore.getBook(saved.currentBookId)
-            const chapters = abStore.getChapters(saved.currentBookId)
-            if (book && chapters.length > 0) {
-              const idx = chapters[book.currentChapterIndex] ? book.currentChapterIndex : 0
-              const chapter = chapters[idx]
-              set({
-                currentChapterId: chapter.id,
-                currentChapterIndex: idx,
-                bookQueue: chapters.map((c) => c.id),
-                bookQueueIndex: idx,
-                currentTime: book.currentTime,
-                duration: chapter.duration || 0,
-                canResume: true,
-                nowPlaying: {
-                  title: chapter.title,
-                  subtitle: book.author || book.title,
-                  label: book.title,
-                  kind: 'audiobook',
-                  chapterPosition: { index: idx, count: chapters.length },
-                },
-              })
-            }
+          } else if (source === 'audiobook' && book && chapter) {
+            set({
+              currentTime: book.currentTime,
+              duration: chapter.duration || 0,
+              canResume: true,
+              nowPlaying: {
+                title: chapter.title,
+                subtitle: book.author || book.title,
+                label: book.title,
+                kind: 'audiobook',
+                chapterPosition: { index: chapterIndex, count: chapters.length },
+              },
+            })
           }
         })()
       }
@@ -657,12 +654,38 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     async restoreSource(source) {
       const s = get()
       if (s.source === source) return
-      if (source === 'music' && s.currentTrackId) {
+      if (s.source === 'audiobook') flushAudiobookProgressNow()
+      if (source === 'music' && s.currentTrackId && useLibraryStore.getState().getTrack(s.currentTrackId)) {
         await loadMusicItem(s.currentTrackId, false, s.musicCurrentTime)
-      } else if (source === 'audiobook' && s.currentBookId) {
-        const book = useAudiobookStore.getState().getBook(s.currentBookId)
-        if (book) await loadChapterAtIndex(book.id, book.currentChapterIndex, false, book.currentTime)
+        return
       }
+      if (source === 'audiobook' && s.currentBookId) {
+        const abStore = useAudiobookStore.getState()
+        const book = abStore.getBook(s.currentBookId)
+        if (book && abStore.getChapters(book.id).length) {
+          await loadChapterAtIndex(book.id, book.currentChapterIndex, false, book.currentTime)
+          return
+        }
+      }
+
+      // Selecting an empty section still switches the transport source. Keep
+      // the other section's remembered session available for a later return.
+      get().pause()
+      const a = getAudio()
+      a.removeAttribute('src')
+      a.load()
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
+      if (currentCoverUrl) URL.revokeObjectURL(currentCoverUrl)
+      currentObjectUrl = null
+      currentCoverUrl = null
+      resetBookCoverCache()
+      set({ source, currentTime: 0, duration: 0, nowPlaying: null, coverUrl: null, canResume: false, playbackError: null,
+        ...(source === 'music'
+          ? { currentTrackId: null, musicCurrentTime: 0, musicQueueIndex: -1 }
+          : { currentBookId: null, currentChapterId: null, currentChapterIndex: 0, bookQueue: [], bookQueueIndex: -1 }),
+      })
+      if ('mediaSession' in navigator) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = 'none' }
+      persistPlayerState()
     },
 
     async playPlaylist(playlistId, startTrackId) {
@@ -923,31 +946,48 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     handleTrackRemoved(trackId) {
-      const { musicQueue, currentTrackId } = get()
-      const newQueue = musicQueue.filter((id) => id !== trackId)
-      if (currentTrackId === trackId && get().source === 'music') {
-        get().pause()
+      get().handleTracksRemoved([trackId])
+    },
+
+    handleTracksRemoved(trackIds) {
+      const removed = new Set(trackIds)
+      const s = get()
+      const newQueue = s.musicQueue.filter((id) => !removed.has(id))
+      const currentRemoved = s.currentTrackId !== null && removed.has(s.currentTrackId)
+      const pendingRemoved = s.isLoading && removed.has(s.musicQueue[s.musicQueueIndex])
+      if (newQueue.length === s.musicQueue.length && !currentRemoved && !pendingRemoved) return
+      const activeRemoved = s.source === 'music' && (currentRemoved || pendingRemoved)
+      if (activeRemoved) {
+        ++loadGeneration
+        cancelPendingSeek?.()
+        cancelPendingSeek = null
         intendedToPlay = false
-        getAudio().pause()
+        if (musicSaveTimer) clearTimeout(musicSaveTimer)
+        musicSaveTimer = null
+        const a = getAudio()
+        // Clear the source before pausing: its pause event must not persist
+        // the removed track or produce a second write for this batch.
+        a.removeAttribute('src')
+        a.pause()
+        a.load()
         if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
         if (currentCoverUrl) URL.revokeObjectURL(currentCoverUrl)
         currentObjectUrl = null
         currentCoverUrl = null
-        getAudio().removeAttribute('src')
         set({
-          musicQueue: newQueue,
-          currentTrackId: null,
-          isPlaying: false,
-          currentTime: 0,
-          duration: 0,
-          coverUrl: null,
-          musicQueueIndex: -1,
-          canResume: false,
-          nowPlaying: null,
+          musicQueue: newQueue, currentTrackId: null, musicQueueIndex: -1,
+          musicCurrentTime: 0, isPlaying: false, isLoading: false,
+          currentTime: 0, duration: 0, coverUrl: null, canResume: false, nowPlaying: null,
         })
       } else {
-        const newIndex = currentTrackId ? newQueue.indexOf(currentTrackId) : -1
-        set({ musicQueue: newQueue, musicQueueIndex: newIndex })
+        const currentTrackId = currentRemoved ? null : s.currentTrackId
+        const queueTarget = s.source === 'music' && s.isLoading
+          ? s.musicQueue[s.musicQueueIndex]
+          : currentTrackId
+        set({ musicQueue: newQueue, currentTrackId,
+          musicQueueIndex: queueTarget ? newQueue.indexOf(queueTarget) : -1,
+          ...(currentRemoved ? { musicCurrentTime: 0 } : {}),
+        })
       }
       persistPlayerState()
     },

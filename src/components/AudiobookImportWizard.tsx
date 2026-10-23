@@ -73,7 +73,7 @@ export default function AudiobookImportWizard({ onClose }: Props) {
   const dirInputRef = useRef<HTMLInputElement>(null)
   const filesInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
-  const readTokenRef = useRef(0)
+  const readControllerRef = useRef<AbortController | null>(null)
 
   const dirSupported = useMemo(() => supportsDirectoryPicker(), [])
 
@@ -84,6 +84,8 @@ export default function AudiobookImportWizard({ onClose }: Props) {
     }
   }, [])
 
+  useEffect(() => () => readControllerRef.current?.abort(), [])
+
   const coverFile = customCover ?? (coverIndex != null ? coverCandidates[coverIndex] : undefined)
   const coverPreviewUrl = useObjectUrl(coverFile)
   const coverCandidateUrls = useObjectUrls(coverCandidates)
@@ -93,12 +95,21 @@ export default function AudiobookImportWizard({ onClose }: Props) {
   const readingDurations = chapters.some((c) => c.duration == null)
 
   const readDurations = async (list: EditableChapter[]) => {
-    const token = ++readTokenRef.current
+    readControllerRef.current?.abort()
+    const controller = new AbortController()
+    readControllerRef.current = controller
     for (const item of list) {
-      const duration = await readAudioDuration(item.file)
-      if (readTokenRef.current !== token) return // superseded by a newer selection
+      if (controller.signal.aborted) return
+      const duration = await readAudioDuration(item.file, controller.signal)
+      if (controller.signal.aborted) return
       setChapters((prev) => prev.map((c) => (c.key === item.key ? { ...c, duration } : c)))
     }
+    if (readControllerRef.current === controller) readControllerRef.current = null
+  }
+
+  const close = () => {
+    readControllerRef.current?.abort()
+    onClose()
   }
 
   const checkStorage = async (bytes: number) => {
@@ -118,6 +129,7 @@ export default function AudiobookImportWizard({ onClose }: Props) {
   }
 
   const loadFiles = (files: File[], manualTitle?: string) => {
+    readControllerRef.current?.abort()
     const candidate = buildImportCandidate(files, manualTitle)
     if (candidate.chapters.length === 0) {
       setError('No supported audio files were found in your selection.')
@@ -205,7 +217,7 @@ export default function AudiobookImportWizard({ onClose }: Props) {
         replaceBookId,
       })
       showToast('Audiobook added')
-      onClose()
+      close()
     } catch (err) {
       const message =
         err instanceof AudiobookImportError ? err.message : 'Something went wrong saving this audiobook.'
@@ -227,7 +239,7 @@ export default function AudiobookImportWizard({ onClose }: Props) {
   return (
     <div className="full-player import-wizard">
       <div className="full-top">
-        <button className="icon-btn ghost" onClick={onClose} aria-label="Close">
+        <button className="icon-btn ghost" onClick={close} aria-label="Close">
           <XIcon />
         </button>
         <div className="label">Add Audio Book</div>
@@ -389,7 +401,7 @@ export default function AudiobookImportWizard({ onClose }: Props) {
 
       {step === 'preview' && (
         <div className="import-actions">
-          <button className="btn" onClick={onClose}>
+          <button className="btn" onClick={close}>
             Cancel
           </button>
           <button

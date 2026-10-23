@@ -7,6 +7,8 @@ import { AudiobookImportError, useAudiobookStore } from '@/store/useAudiobookSto
 import type { ImportChapterInput } from '@/store/useAudiobookStore'
 // Types
 import type { AudiobookChapter } from '@/types'
+// Utils
+import * as imageThumbnail from '@/utils/imageThumbnail'
 
 function makeFile(name: string, size = 1024, type = 'audio/mpeg'): File {
   return new File([new Uint8Array(size)], name, { type })
@@ -154,6 +156,33 @@ describe('duplicate detection and replace', () => {
     expect(newChapters[0].completed).toBe(true)
     expect(newChapters[0].lastPosition).toBe(30)
   })
+})
+
+describe('updateBookMeta', () => {
+  it.each(['deleteBook', 'clearAllBooks'] as const)(
+    'does not save orphan covers when %s runs during thumbnail generation',
+    async (remove) => {
+      const book = await useAudiobookStore.getState().importBook({
+        title: 'Pending cover', chapters: makeChapters(1), fingerprint: 'fp-cover',
+      })
+      let finishThumbnail!: (thumbnail: Blob) => void
+      vi.spyOn(imageThumbnail, 'createImageThumbnail').mockImplementationOnce(() => new Promise((resolve) => {
+        finishThumbnail = resolve
+      }))
+      const update = useAudiobookStore.getState().updateBookMeta(book.id, {
+        cover: makeFile('cover.jpg', 10, 'image/jpeg'),
+      })
+
+      if (remove === 'deleteBook') await useAudiobookStore.getState().deleteBook(book.id)
+      else await useAudiobookStore.getState().clearAllBooks()
+      finishThumbnail(new Blob(['thumbnail'], { type: 'image/webp' }))
+      await update
+
+      expect(await db.audiobooks.count()).toBe(0)
+      expect(await db.audiobookBlobs.count()).toBe(0)
+      expect(useAudiobookStore.getState().getBook(book.id)).toBeUndefined()
+    },
+  )
 })
 
 describe('deleteBook', () => {

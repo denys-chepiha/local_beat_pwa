@@ -1,44 +1,27 @@
 // Components
 import { MusicIcon, BookIcon, VideoIcon } from '@/components/Icons'
-// Store
+// Services
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore, sectionOfScreen } from '@/store/useUiStore'
+// Types
+import type { AppSection } from '@/store/useUiStore'
+
+const SECTIONS = [
+  { id: 'music', label: 'Music', Icon: MusicIcon },
+  { id: 'audiobooks', label: 'Audio Books', Icon: BookIcon },
+  { id: 'reader', label: 'Reader', Icon: BookIcon },
+  { id: 'video', label: 'Video', Icon: VideoIcon },
+] as const
 
 export default function SectionSwitcher() {
   const screen = useUiStore((s) => s.screen)
   const switchSection = useUiStore((s) => s.switchSection)
-  const selectSection = (section: 'music' | 'audiobooks' | 'video') => {
-    usePlayerStore.getState().pause()
-    switchSection(section)
-    if (section !== 'video') void usePlayerStore.getState().restoreSource(section === 'music' ? 'music' : 'audiobook')
-  }
   const section = sectionOfScreen(screen)
-
-  return (
-    <nav className="section-switcher" aria-label="App section">
-      <button
-        type="button"
-
-        aria-pressed={section === 'music'}
-        className={`section-tab${section === 'music' ? ' active' : ''}`}
-        onClick={() => selectSection('music')}
-      >
-        <MusicIcon width={16} height={16} />
-        Music
-      </button>
-      <button
-        type="button"
-
-        aria-pressed={section === 'audiobooks'}
-        className={`section-tab${section === 'audiobooks' ? ' active' : ''}`}
-        onClick={() => selectSection('audiobooks')}
-      >
-        <BookIcon width={16} height={16} />
-        Audio Books
-      </button>
-      <button type="button" className={`section-tab${section === 'video' ? ' active' : ''}`} aria-pressed={section === 'video'} onClick={() => selectSection('video')}>
-        <VideoIcon width={16} height={16} />Video
-      </button>
-    </nav>
-  )
+  const selectSection = (next: AppSection) => {
+    if (next === section) return
+    usePlayerStore.getState().pause()
+    switchSection(next)
+    if (next === 'music' || next === 'audiobooks') void usePlayerStore.getState().restoreSource(next === 'music' ? 'music' : 'audiobook')
+  }
+  return <nav className="section-switcher" aria-label="App section">{SECTIONS.map(({ id, label, Icon }) => <button key={id} type="button" className={`section-tab${section === id ? ' active' : ''}`} aria-pressed={section === id} onClick={() => selectSection(id)}><Icon width={16} height={16} />{label}</button>)}</nav>
 }

@@ -3,6 +3,7 @@ import Dexie from 'dexie'
 import type { VideoEntry } from '@/screens/VideoScreen/useVideoSession'
 import type { Table } from 'dexie'
 // Types
+import type { ReaderBook, ReaderPayload } from '@/reader/types'
 import type {
   Playlist,
   Track,
@@ -22,6 +23,9 @@ import type {
  * a migration here can never touch existing music data.
  */
 class LocalBeatDB extends Dexie {
+  readerBooks!: Table<ReaderBook, string>
+  readerFiles!: Table<ReaderPayload, string>
+  readerCovers!: Table<ReaderPayload, string>
   videoFiles!: Table<VideoEntry, number>
   playlists!: Table<Playlist, string>
   tracks!: Table<Track, string>
@@ -39,7 +43,6 @@ class LocalBeatDB extends Dexie {
       blobs: 'id',
       playerState: 'id',
     })
-    this.version(3).stores({ videoFiles: 'id' })
     // v2: additive only — adds audiobook tables, touches nothing music-related.
     this.version(2).stores({
       playlists: 'id, name, updatedAt',
@@ -49,6 +52,12 @@ class LocalBeatDB extends Dexie {
       audiobooks: 'id, status, updatedAt, lastListenedAt, fingerprint',
       audiobookChapters: 'id, bookId, order',
       audiobookBlobs: 'id',
+    })
+    this.version(3).stores({ videoFiles: 'id' })
+    this.version(4).stores({
+      readerBooks: 'id, title, addedAt, lastReadAt, &fingerprint',
+      readerFiles: 'id',
+      readerCovers: 'id',
     })
   }
 }

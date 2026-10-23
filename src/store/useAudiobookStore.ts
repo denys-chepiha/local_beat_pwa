@@ -300,11 +300,14 @@ export const useAudiobookStore = create<AudiobookStore>((set, get) => ({
       }
     }
 
-    await db.transaction('rw', db.audiobooks, db.audiobookBlobs, async () => {
+    const updated = await db.transaction('rw', db.audiobooks, db.audiobookBlobs, async () => {
+      if (!(await db.audiobooks.get(bookId))) return false
       if (newCoverBlobs.length) await db.audiobookBlobs.bulkAdd(newCoverBlobs)
       await db.audiobooks.update(bookId, dbPatch)
       if (staleCoverIds.length) await db.audiobookBlobs.bulkDelete(staleCoverIds)
+      return true
     })
+    if (!updated) return
     set((s) => ({
       books: s.books.map((b) => (b.id === bookId ? { ...b, ...dbPatch } : b)),
     }))

@@ -8,6 +8,9 @@ import type { Playlist, Track, TrackBlob } from '@/types'
 import { uid } from '@/utils/id'
 import { extractMetadata, isAudioFile } from '@/utils/audioFile'
 
+let importGeneration = 0
+let progressOwner = 0
+
 export interface ImportResult {
   added: number
   skipped: string[]
@@ -100,19 +103,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     })
 
     if (audioFiles.length === 0) {
-      set({ importProgress: null })
       return result
     }
 
+    const generation = importGeneration
+    const owner = ++progressOwner
+    const isCurrent = () => generation === importGeneration
     set({ importProgress: { done: 0, total: audioFiles.length } })
     try {
       const newTracks: Track[] = []
       const newBlobs: TrackBlob[] = []
 
       for (let i = 0; i < audioFiles.length; i++) {
+        if (!isCurrent()) return result
         const file = audioFiles[i]
         try {
           const meta = await extractMetadata(file)
+          if (!isCurrent()) return result
           const id = uid()
           newTracks.push({
             id,
@@ -128,18 +135,21 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             createdAt: Date.now(),
           })
           newBlobs.push({ id, blob: file, cover: meta.cover })
-          result.added++
         } catch {
+          if (!isCurrent()) return result
           result.skipped.push(file.name)
         }
-        set({ importProgress: { done: i + 1, total: audioFiles.length } })
+        if (owner === progressOwner) {
+          set({ importProgress: { done: i + 1, total: audioFiles.length } })
+        }
       }
 
       if (newTracks.length > 0) {
         const updatedAt = Date.now()
         const ids = newTracks.map((t) => t.id)
-        await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
+        const saved = await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
           const playlist = await db.playlists.get(playlistId)
+          if (!isCurrent()) return false
           if (!playlist) throw new Error('Playlist was deleted during import')
           await db.tracks.bulkAdd(newTracks)
           await db.blobs.bulkAdd(newBlobs)
@@ -149,7 +159,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               updatedAt,
             })
           }
+          return true
         })
+        if (!saved || !isCurrent()) return result
+        result.added = newTracks.length
         set((s) => {
           const tracks = { ...s.tracks }
           for (const t of newTracks) tracks[t.id] = t
@@ -166,7 +179,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
       return result
     } finally {
-      set({ importProgress: null })
+      if (owner === progressOwner) set({ importProgress: null })
     }
   },
 
@@ -219,6 +232,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   async clearAllMusic() {
+    importGeneration++
+    progressOwner++
+    set({ importProgress: null })
     const updatedAt = Date.now()
     await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
       await db.tracks.clear()
@@ -235,6 +251,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   async deleteAllPlaylists() {
+    importGeneration++
+    progressOwner++
+    set({ importProgress: null })
     await db.transaction('rw', db.tracks, db.blobs, db.playlists, async () => {
       await db.tracks.clear()
       await db.blobs.clear()

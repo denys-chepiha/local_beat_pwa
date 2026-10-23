@@ -13,7 +13,12 @@
   },
   "dependencies": {
     "dexie": "^4.4.6",
+    "dompurify": "3.4.17",
+    "fflate": "0.8.3",
     "jsmediatags": "^3.9.7",
+    "mammoth": "1.13.0",
+    "marked": "18.1.1",
+    "pdfjs-dist": "6.4.299",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.7"

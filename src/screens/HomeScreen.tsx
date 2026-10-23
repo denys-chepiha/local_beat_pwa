@@ -15,7 +15,7 @@ export default function HomeScreen() {
   const deletePlaylist = useLibraryStore((s) => s.deletePlaylist)
   const { openPlaylist, openSettings, showToast } = useUiStore()
   const nowPlaying = usePlayerStore((s) => s.nowPlaying)
-  const handleTrackRemoved = usePlayerStore((s) => s.handleTrackRemoved)
+  const handleTracksRemoved = usePlayerStore((s) => s.handleTracksRemoved)
   const [creating, setCreating] = useState(false)
 
   const handleCreate = async (name: string) => {
@@ -25,7 +25,7 @@ export default function HomeScreen() {
   }
 
   const handleDeletePlaylist = (playlistId: string, trackIds: string[]) => {
-    trackIds.forEach((id) => handleTrackRemoved(id))
+    handleTracksRemoved(trackIds)
     void deletePlaylist(playlistId).then(() => showToast('Playlist deleted'))
   }
 

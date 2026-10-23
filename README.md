@@ -1,8 +1,8 @@
-# Local Beat — Offline Music Player
+# Local Beat — Offline Media and Reader
 
-A personal, offline-first music player PWA. No subscriptions, no ads, no accounts,
-no servers. You add your own local audio files, the app stores them on your device,
-and you listen to your music — even without internet.
+A personal, offline-first PWA for music, audiobooks, video and reading. No subscriptions,
+no ads, no accounts, no servers. Add your own local files, keep them on your device,
+and listen, watch or read — even without internet.
 
 ## How it works
 
@@ -36,6 +36,8 @@ HTMLAudioElement · Media Session API · File API
 
 ## Develop
 
+Use Node.js 22.13 or newer and pnpm.
+
 ```bash
 pnpm install
 pnpm dev      # local dev server
@@ -50,7 +52,7 @@ builds with `pnpm build` and serves `dist/`.
 
 ## Video and tablets
 
-The shared Music / Audio Books / Video menu is available throughout the app. Add multiple local videos to a persistent playlist, including files from external drives visible in the system picker. Files are saved locally in IndexedDB and never uploaded. The playlist, active video, playback position and watched markers survive navigation and reloads. Saving requires enough device storage; errors are shown in the player. Clearing site data removes these copies.
+The shared Music / Audio Books / Reader / Video menu is available throughout the app. Add multiple local videos to a persistent playlist, including files from external drives visible in the system picker. Files are saved locally in IndexedDB and never uploaded. The playlist, active video, playback position and watched markers survive navigation and reloads. Saving requires enough device storage; errors are shown in the player. Clearing site data removes these copies.
 
 Video controls include play/pause, previous/next, automatic advance, repeat, timeline, ±10 seconds, speed, mute, touch volume and a bottom-right fullscreen button. Hold the timeline for one second to see a frame preview; release to seek. Completed videos are marked in the playlist. Fullscreen keeps these controls and the playlist available. During playback controls disappear after 2.5 seconds; move the mouse, tap the picture or use the keyboard to reveal them. The first reveal tap does not pause playback. A full-window fallback is available when native fullscreen is unavailable. On iOS, volume uses Web Audio when supported; a recovery message advises device buttons if unavailable. Native Safari video fullscreen is used when container fullscreen is unavailable.
 
@@ -66,7 +68,7 @@ pnpm build
 pnpm audit
 ```
 
-Review findings and device checks: docs/review-2026-10-22.md.
+Review findings and device checks: docs/review-2026-10-23.md; previous media review: docs/review-2026-10-22.md.
 
 ## iPhone / Safari notes
 
@@ -74,6 +76,18 @@ The app is Safari-first. The first playback must follow a user tap (iOS blocks
 autoplay). Once a track is playing you can lock the screen and keep listening; automatic
 track switching on a locked screen depends on the iOS version. Browsers may clear local
 storage when space runs low — **keep the original files on your device.**
+
+## Reader
+
+Music opens by default. The top tabs are Music, Audio Books, Reader, Video; each section remembers its last destination.
+
+Add PDF, EPUB, FB2 (including .fb2.zip), TXT, Markdown, HTML, DOCX, JPEG, PNG and WebP to the local book library. Cover cards use the PDF first page, an embedded book cover or a title fallback. Search/filter/sort the library, reopen at the saved reading position, and remove local copies when finished. Files and bookmarks survive reload on the same device; there is no cloud sync. Import originals separately on other devices.
+
+Reading supports paged mode with left/right swipes, continuous scrolling, page counts/jump, the shared progress slider, search, contents, bookmarks and fullscreen. Keyboard Left/Right and Page Up/Down move pages; Escape closes a panel or exits fullscreen fallback. Paper, sepia and night tones change the reading surface. Text documents have font, size and line-spacing controls; PDF/images offer fit, zoom and rotation. PDF text is selectable when the document includes a text layer; password-protected PDFs prompt for their password.
+
+Reflowed page numbers depend on screen/font settings. Scanned PDFs and images have no text search without OCR. DOCX conversion is for reading, not exact print reproduction. DRM-encrypted books, legacy DOC, DjVu, MOBI, spreadsheets and presentations are unsupported; export them to PDF first. Document scripts, external resources, SVG, embedded styles and fonts are omitted. Reading tones do not alter system display temperature.
+
+Books are limited to 150 MiB/5,000 PDF pages; archive and embedded-resource limits are stricter to protect mobile memory. Keep originals: browsers may evict local files under storage pressure. PDF resources increase the offline app cache; reader engines load on demand for the UI. Details and checks: docs/architecture/reader.md and docs/review-2026-10-23.md.
 
 ---
 

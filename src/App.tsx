@@ -1,23 +1,24 @@
 // Core
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 // Components
 import SectionSwitcher from '@/components/SectionSwitcher'
 import ChepioTechFooter from '@/components/ChepioTechFooter/ChepioTechFooter'
 import MiniPlayer from '@/components/MiniPlayer'
-import FullPlayer from '@/components/FullPlayer'
-// Screens
-import { useVideoSession } from '@/screens/VideoScreen/useVideoSession'
-import VideoScreen from '@/screens/VideoScreen/VideoScreen'
+// Components
 import HomeScreen from '@/screens/HomeScreen'
-import PlaylistScreen from '@/screens/PlaylistScreen'
-import SettingsScreen from '@/screens/SettingsScreen'
-import AudiobookLibraryScreen from '@/screens/AudiobookLibraryScreen'
-import AudiobookScreen from '@/screens/AudiobookScreen'
 // Store
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { useAudiobookStore } from '@/store/useAudiobookStore'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
+
+const FullPlayer = lazy(() => import('@/components/FullPlayer'))
+const VideoScreen = lazy(() => import('@/screens/VideoScreen/VideoScreen'))
+const ReaderScreen = lazy(() => import('@/screens/ReaderScreen/ReaderScreen'))
+const PlaylistScreen = lazy(() => import('@/screens/PlaylistScreen'))
+const SettingsScreen = lazy(() => import('@/screens/SettingsScreen'))
+const AudiobookLibraryScreen = lazy(() => import('@/screens/AudiobookLibraryScreen'))
+const AudiobookScreen = lazy(() => import('@/screens/AudiobookScreen'))
 
 let startup: Promise<void> | null = null
 
@@ -37,7 +38,7 @@ export default function App() {
   // Load both libraries first, then restore the player session (which may
   // point at either a music track or an audiobook chapter).
   useEffect(() => {
-    startup ??= Promise.all([loadAll(), loadAudiobooks(), useVideoSession.getState().hydrate()]).then(() => initPlayer())
+    startup ??= Promise.all([loadAll(), loadAudiobooks()]).then(async () => { await initPlayer(); if (usePlayerStore.getState().source !== 'music') await usePlayerStore.getState().restoreSource('music') })
     void startup.catch(() => setStartupError(true))
   }, [loadAll, loadAudiobooks, initPlayer])
 
@@ -57,7 +58,9 @@ export default function App() {
   return (
     <div className="app">
       <SectionSwitcher />
+      <Suspense fallback={<p className="screen" role="status">Opening section…</p>}>
       {screen.name === 'video' && <VideoScreen />}
+      {screen.name === 'reader' && <ReaderScreen bookId={screen.bookId} />}
       {playbackError && screen.name !== 'video' && <p className="playback-error" role="alert">{playbackError}</p>}
       {screen.name === 'home' && <HomeScreen />}
       {screen.name === 'playlist' && <PlaylistScreen playlistId={screen.playlistId} />}
@@ -65,8 +68,9 @@ export default function App() {
       {screen.name === 'audiobooks' && <AudiobookLibraryScreen />}
       {screen.name === 'audiobook' && <AudiobookScreen bookId={screen.bookId} />}
 
-      {nowPlaying && !fullPlayerOpen && screen.name !== 'video' && <MiniPlayer />}
+      {nowPlaying && !fullPlayerOpen && screen.name !== 'video' && screen.name !== 'reader' && <MiniPlayer />}
       {fullPlayerOpen && <FullPlayer />}
+      </Suspense>
 
       {toast && <div className="toast">{toast}</div>}
 

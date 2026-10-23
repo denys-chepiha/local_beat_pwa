@@ -49,7 +49,9 @@ describe('mini player navigation', () => {
 it('shows live progress after seeking without a release event and after changing tracks', () => {
   usePlayerStore.setState({ duration: 180, currentTime: 0, seek: (time) => usePlayerStore.setState({ currentTime: time }) })
   render(<MiniPlayer />)
+  expect(screen.getByRole('slider')).toHaveClass('progress-slider')
   fireEvent.change(screen.getByRole('slider'), { target: { value: '90' } })
+  expect(screen.getByRole('slider').style.getPropertyValue('--progress-slider-fill')).toBe('50%')
   act(() => usePlayerStore.setState({ currentTime: 91 }))
   expect(screen.getByRole('slider')).toHaveValue('91')
   act(() => usePlayerStore.setState({ currentTrackId: 'next', currentTime: 0, duration: 120 }))
