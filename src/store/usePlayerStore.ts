@@ -61,6 +61,17 @@ function getAudio(): HTMLAudioElement {
   return audio
 }
 
+/** Keep music in the playback category when WebKit suspends/reactivates output. */
+function activatePlaybackSession() {
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+  if (!session) return
+  try {
+    session.type = 'playback'
+  } catch {
+    // Experimental API: ordinary media playback must still work without it.
+  }
+}
+
 function resetBookCoverCache() {
   if (currentBookCoverUrl) URL.revokeObjectURL(currentBookCoverUrl)
   currentBookCoverUrl = null
@@ -213,12 +224,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     const setAction = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
       try { ms.setActionHandler(action, handler) } catch { /* Older Safari may not support every action. */ }
     }
-    setAction('play', () => {
-      // The OS can suspend the element before the store receives its pause event.
-      // A system Play command must never toggle an already-playing element.
-      if (getAudio().paused) void get().togglePlay()
-      else refreshAudioMediaSession()
-    })
+    setAction('play', () => { void playAudio() })
     setAction('pause', () => get().pause())
     setAction('previoustrack', () => void get().previous())
     setAction('nexttrack', () => void get().next())
@@ -281,6 +287,34 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     registerMediaSessionHandlers()
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = getAudio().paused ? 'paused' : 'playing'
     updatePositionState()
+  }
+
+  // A remote Play is an idempotent command, not a UI toggle. Invoke play()
+  // synchronously before changing Media Session state/handlers: the command's
+  // playback authorization belongs to this callback, including after interruption.
+  const playAudio = async () => {
+    const a = getAudio()
+    const session = get()
+    if (session.isLoading) return
+    if (session.source === 'music' ? !session.currentTrackId : !session.currentBookId) return
+    if (!a.src) {
+      await get().resume()
+      return
+    }
+    const generation = loadGeneration
+    set({ playbackError: null })
+    try {
+      activatePlaybackSession()
+      await a.play()
+      if (generation !== loadGeneration) return
+      refreshAudioMediaSession()
+    } catch (error) {
+      if (generation !== loadGeneration) return
+      intendedToPlay = false
+      set({ isPlaying: false, playbackError: 'Audio could not resume. Open Local Beat and press Play again.' })
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
+      console.warn('[player] audio resume rejected', error)
+    }
   }
 
   const updatePositionState = () => {
@@ -373,6 +407,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
     if (autoplay) {
       try {
+        activatePlaybackSession()
         await a.play()
       } catch {
         if (generation === loadGeneration) set({ isPlaying: false })
@@ -452,6 +487,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
     if (autoplay) {
       try {
+        activatePlaybackSession()
         await a.play()
       } catch {
         if (generation === loadGeneration) set({ isPlaying: false })
@@ -566,6 +602,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             else if (get().repeatMode === 'one') {
               a.currentTime = 0
               set({ currentTime: 0, musicCurrentTime: 0 })
+              activatePlaybackSession()
               void a.play().catch(() => set({ isPlaying: false }))
             }
             else void get().next()
@@ -588,6 +625,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
               return
             }
             if (intendedToPlay && a.paused && a.src) {
+              activatePlaybackSession()
               a.play().catch((err) =>
                 console.warn('[player] foreground auto-resume rejected', err),
               )
@@ -780,29 +818,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     async togglePlay() {
-      refreshAudioMediaSession()
-      const a = getAudio()
-      const { currentTrackId, currentBookId, canResume, source } = get()
-      const hasCurrent = source === 'music' ? !!currentTrackId : !!currentBookId
-      if (!hasCurrent) return
-
-      // Resuming a restored session: the blob is not loaded yet.
-      if (canResume && !a.src) {
-        await get().resume()
-        return
-      }
-      if (a.paused) {
-        try {
-          await a.play()
-        } catch {
-          set({ isPlaying: false })
-        }
-      } else {
-        // Explicit user pause — clear intent so the foreground safety net
-        // doesn't auto-resume it.
-        intendedToPlay = false
-        a.pause()
-      }
+      if (getAudio().paused) await playAudio()
+      else get().pause()
     },
 
     async next() {
