@@ -213,7 +213,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     const setAction = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
       try { ms.setActionHandler(action, handler) } catch { /* Older Safari may not support every action. */ }
     }
-    setAction('play', () => { if (!get().isPlaying) void get().togglePlay() })
+    setAction('play', () => {
+      // The OS can suspend the element before the store receives its pause event.
+      // A system Play command must never toggle an already-playing element.
+      if (getAudio().paused) void get().togglePlay()
+      else refreshAudioMediaSession()
+    })
     setAction('pause', () => get().pause())
     setAction('previoustrack', () => void get().previous())
     setAction('nexttrack', () => void get().next())
@@ -262,6 +267,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       artwork,
     })
     registerMediaSessionHandlers()
+  }
+
+  const refreshAudioMediaSession = () => {
+    const session = get()
+    if (session.source === 'music' && session.currentTrackId) {
+      setMusicMediaSession(useLibraryStore.getState().getTrack(session.currentTrackId))
+    } else if (session.source === 'audiobook' && session.currentBookId && session.currentChapterId) {
+      const books = useAudiobookStore.getState()
+      const chapter = books.getChapters(session.currentBookId).find((item) => item.id === session.currentChapterId)
+      if (chapter) setAudiobookMediaSession(chapter, books.getBook(session.currentBookId), session.coverUrl)
+    }
+    registerMediaSessionHandlers()
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = getAudio().paused ? 'paused' : 'playing'
+    updatePositionState()
   }
 
   const updatePositionState = () => {
@@ -523,8 +542,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             intendedToPlay = true
             lastListeningTickAt = Date.now()
             set({ isPlaying: true })
-            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
-            updatePositionState()
+            refreshAudioMediaSession()
           })
           a.addEventListener('pause', () => {
             // Distinguish an OS-initiated background suspension (iOS lock screen,
@@ -561,6 +579,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
           // moment the app comes back to the foreground (intent is still "playing").
           // While hidden, flush whatever progress hasn't been persisted yet.
           document.addEventListener('visibilitychange', () => {
+            // Only active audio may reclaim the session; paused audio must not
+            // overwrite the video player's controls when the app is backgrounded.
+            if (a.src && !a.paused) refreshAudioMediaSession()
             if (document.hidden) {
               persistPlayerState()
               if (get().source === 'audiobook') flushAudiobookProgressNow()
@@ -759,15 +780,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     },
 
     async togglePlay() {
-      const session = get()
-      if (session.source === 'music' && session.currentTrackId) {
-        setMusicMediaSession(useLibraryStore.getState().getTrack(session.currentTrackId))
-      } else if (session.currentBookId && session.currentChapterId) {
-        const books = useAudiobookStore.getState()
-        const chapter = books.getChapters(session.currentBookId).find((item) => item.id === session.currentChapterId)
-        if (chapter) setAudiobookMediaSession(chapter, books.getBook(session.currentBookId), session.coverUrl)
-      }
-      registerMediaSessionHandlers()
+      refreshAudioMediaSession()
       const a = getAudio()
       const { currentTrackId, currentBookId, canResume, source } = get()
       const hasCurrent = source === 'music' ? !!currentTrackId : !!currentBookId
