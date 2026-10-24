@@ -264,6 +264,39 @@ describe('usePlayerStore — music playback (post audiobook refactor)', () => {
 
 
 describe('playback race regressions', () => {
+  it('keeps current audio active during the next file read and avoids a startup seek', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist, tracks } = await seedPlaylist(useLibraryStore, 2)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    const audio = document.querySelector('audio')!
+    const blob = await useLibraryStore.getState().getBlob(tracks[1].id)
+    let finish!: (value: typeof blob) => void
+    vi.spyOn(useLibraryStore.getState(), 'getBlob').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pause = vi.spyOn(audio, 'pause')
+    const seek = vi.spyOn(audio, 'currentTime', 'set')
+    const pending = usePlayerStore.getState().next()
+    expect(audio.paused).toBe(false)
+    expect(usePlayerStore.getState().isPlaying).toBe(true)
+    expect(pause).not.toHaveBeenCalled()
+    finish(blob)
+    await pending
+    expect(usePlayerStore.getState().currentTrackId).toBe(tracks[1].id)
+    expect(audio.paused).toBe(false)
+    // The test media load() resets currentTime once; the player must not seek again.
+    expect(seek).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the old track if reading the replacement fails', async () => {
+    const { useLibraryStore, usePlayerStore } = await freshModules()
+    const { playlist } = await seedPlaylist(useLibraryStore, 2)
+    await usePlayerStore.getState().playPlaylist(playlist.id)
+    vi.spyOn(useLibraryStore.getState(), 'getBlob').mockRejectedValueOnce(new Error('Storage failure'))
+    await usePlayerStore.getState().next()
+    expect(document.querySelector('audio')!.paused).toBe(true)
+    expect(usePlayerStore.getState().isPlaying).toBe(false)
+    expect(usePlayerStore.getState().playbackError).toContain('Could not open')
+  })
+
   it('keeps the last requested track when older storage reads finish late', async () => {
     const { useLibraryStore, usePlayerStore } = await freshModules()
     const { playlist, tracks } = await seedPlaylist(useLibraryStore, 3)
