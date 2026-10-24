@@ -342,16 +342,44 @@ it('restores audio metadata after video and treats repeated system pause as paus
     title: string
     constructor(init: MediaMetadataInit) { this.title = init.title ?? '' }
   })
+  const listeners = vi.spyOn(document, 'addEventListener')
   try {
     const { useLibraryStore, usePlayerStore } = await freshModules()
+    const visibilityChanged = listeners.mock.calls.find(([type]) => type === 'visibilitychange')![1] as EventListener
     const { playlist, tracks } = await seedPlaylist(useLibraryStore, 1)
     await usePlayerStore.getState().playPlaylist(playlist.id)
     usePlayerStore.getState().pause()
     mediaSession.metadata = null
     await usePlayerStore.getState().togglePlay()
     expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title })
+    const audio = document.querySelector('audio')!
+    // A native/background resume must restore controls even without togglePlay.
+    usePlayerStore.getState().pause()
+    mediaSession.metadata = null
+    handlers.clear()
+    await audio.play()
+    expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title })
+    expect(handlers.get('play')).toBeTypeOf('function')
+
+    // Simulate delayed pause/play events: the element, not stale UI state,
+    // determines whether an external Play should start playback.
+    audio.pause()
+    usePlayerStore.setState({ isPlaying: true })
+    handlers.get('play')?.()
+    await waitFor(() => expect(audio.paused).toBe(false))
+    usePlayerStore.setState({ isPlaying: false })
+    handlers.get('play')?.()
+    expect(audio.paused).toBe(false)
+
+    mediaSession.metadata = null
+    visibilityChanged(new Event('visibilitychange'))
+    expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title })
     handlers.get('pause')?.()
     handlers.get('pause')?.()
+    // Video owns the session after an explicit audio pause.
+    mediaSession.metadata = null
+    visibilityChanged(new Event('visibilitychange'))
+    expect(mediaSession.metadata).toBeNull()
     expect(usePlayerStore.getState().isPlaying).toBe(false)
   } finally {
     if (original) Object.defineProperty(navigator, 'mediaSession', original)
