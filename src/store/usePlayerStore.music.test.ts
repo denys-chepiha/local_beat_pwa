@@ -332,6 +332,9 @@ describe('playback race regressions', () => {
 
 it('restores audio metadata after video and treats repeated system pause as pause', async () => {
   const original = Object.getOwnPropertyDescriptor(navigator, 'mediaSession')
+  const originalAudioSession = Object.getOwnPropertyDescriptor(navigator, 'audioSession')
+  const audioSession = { type: 'auto' }
+  Object.defineProperty(navigator, 'audioSession', { configurable: true, value: audioSession })
   const handlers = new Map<string, (() => void) | null>()
   const mediaSession = { metadata: null as { title: string } | null, playbackState: 'none',
     setActionHandler: (action: string, handler: (() => void) | null) => handlers.set(action, handler),
@@ -361,15 +364,37 @@ it('restores audio metadata after video and treats repeated system pause as paus
     expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title })
     expect(handlers.get('play')).toBeTypeOf('function')
 
-    // Simulate delayed pause/play events: the element, not stale UI state,
-    // determines whether an external Play should start playback.
+    // Remote Play must reach the media element even with stale UI/paused state.
     audio.pause()
     usePlayerStore.setState({ isPlaying: true })
     handlers.get('play')?.()
     await waitFor(() => expect(audio.paused).toBe(false))
     usePlayerStore.setState({ isPlaying: false })
+    const nativePlay = audio.play.bind(audio)
+    audioSession.type = 'auto'
+    const play = vi.spyOn(audio, 'play').mockImplementation(() => {
+      expect(audioSession.type).toBe('playback')
+      // Do not replace metadata or publish paused state before the play request.
+      expect(mediaSession.metadata).toEqual({ title: 'Existing session' })
+      return nativePlay()
+    })
+    mediaSession.metadata = { title: 'Existing session' }
     handlers.get('play')?.()
+    expect(play).toHaveBeenCalledTimes(1)
     expect(audio.paused).toBe(false)
+    await waitFor(() => expect(mediaSession.metadata).toMatchObject({ title: tracks[0].title }))
+    play.mockRestore()
+
+    usePlayerStore.getState().pause()
+    const rejectedPlay = vi.spyOn(audio, 'play').mockRejectedValueOnce(new DOMException('Blocked', 'NotAllowedError'))
+    handlers.get('play')?.()
+    await waitFor(() => expect(usePlayerStore.getState().playbackError).toContain('Audio could not resume'))
+    expect(mediaSession.playbackState).toBe('paused')
+    rejectedPlay.mockRestore()
+    Object.defineProperty(audioSession, 'type', { set() { throw new Error('Unsupported') } })
+    handlers.get('play')?.()
+    await waitFor(() => expect(audio.paused).toBe(false))
+    expect(usePlayerStore.getState().playbackError).toBeNull()
 
     mediaSession.metadata = null
     visibilityChanged(new Event('visibilitychange'))
@@ -384,6 +409,8 @@ it('restores audio metadata after video and treats repeated system pause as paus
   } finally {
     if (original) Object.defineProperty(navigator, 'mediaSession', original)
     else Reflect.deleteProperty(navigator, 'mediaSession')
+    if (originalAudioSession) Object.defineProperty(navigator, 'audioSession', originalAudioSession)
+    else Reflect.deleteProperty(navigator, 'audioSession')
     vi.unstubAllGlobals()
   }
 })
