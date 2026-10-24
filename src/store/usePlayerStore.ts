@@ -336,13 +336,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     const generation = ++loadGeneration
     cancelPendingSeek?.()
     cancelPendingSeek = null
-    intendedToPlay = false
-    getAudio().pause()
-    set({ isLoading: true, isPlaying: false, playbackError: null, currentTime: 0, duration: 0 })
+    // Keep the current media session alive while IndexedDB reads the next file.
+    // Replacing src/load below performs the actual transition synchronously.
+    set({ isLoading: true, playbackError: null })
     return generation
   }
 
   const restorePosition = (position: number, generation: number) => {
+    // A newly loaded source already starts at zero. Do not introduce a seek
+    // during decoder startup unless there is a real saved position to restore.
+    if (!Number.isFinite(position) || position <= 0) return
     const a = getAudio()
     const apply = () => {
       if (generation !== loadGeneration) return
@@ -361,6 +364,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
   const failLoad = (generation: number) => {
     if (generation !== loadGeneration) return
     intendedToPlay = false
+    getAudio().pause()
     set({ isLoading: false, isPlaying: false, playbackError: 'Could not open this audio file. Try selecting it again.' })
   }
 
@@ -381,6 +385,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     currentCoverUrl = blobRecord.cover ? URL.createObjectURL(blobRecord.cover) : null
 
     const a = getAudio()
+    intendedToPlay = false
     a.src = currentObjectUrl
     a.load()
 
@@ -390,6 +395,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       currentTrackId: trackId,
       musicQueueIndex: get().musicQueue.indexOf(trackId),
       isLoading: false,
+      isPlaying: false,
       duration: track.duration || 0,
       currentTime: 0,
       musicCurrentTime: 0,
@@ -457,6 +463,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     const coverUrl = currentBookCoverUrl
 
     const a = getAudio()
+    intendedToPlay = false
     a.src = currentObjectUrl
     a.load()
 
@@ -465,6 +472,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     set({
       source: 'audiobook',
       isLoading: false,
+      isPlaying: false,
       currentBookId: bookId,
       currentChapterId: chapter.id,
       currentChapterIndex: index,
