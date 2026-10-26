@@ -60,7 +60,7 @@ Dependencies: existing video session store and browser media APIs. Risks: Safari
 
 - [x] Verify auto-advance, repeat and seeking in Chromium; record defects (2026-10-26).
 - [x] Skip unplayable files during automatic runs, keep the playlist open, restart watched videos, persist repeat and use ten-second timeline keys, with regression tests (ADR-0008).
-- [ ] Release: commit, push, Vercel production deployment and live check.
+- [x] Release: commit, push, Vercel production deployment and live check (code a17a3d4, 2026-10-26).
 - [ ] Verify auto-advance with sound on physical iPhone/iPad Safari, including after changing in-app volume.
 
 Definition of Done: `pnpm test`, `pnpm build`, `git diff --check`; Chromium desktop and emulated-touch checks with real media.
