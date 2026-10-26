@@ -53,3 +53,14 @@ Dependencies: current renderers and browser APIs. Risks: iPhone fullscreen limit
 - [ ] Verify physical iPhone/iPad keyboard, gestures and installed fullscreen.
 
 Definition of Done: pnpm test, pnpm build, git diff --check, browser evidence in docs/review-reader-experience-2026-10-23.md.
+
+## Video playlist playback
+Scope: auto-advance, repeat, unplayable-file handling and timeline keyboard seeking. Non-scope: transcoding, background playback and playlist reordering.
+Dependencies: existing video session store and browser media APIs. Risks: Safari automatic starts without a tap and Web Audio resume after auto-advance.
+
+- [x] Verify auto-advance, repeat and seeking in Chromium; record defects (2026-10-26).
+- [x] Skip unplayable files during automatic runs, keep the playlist open, restart watched videos, persist repeat and use ten-second timeline keys, with regression tests (ADR-0008).
+- [ ] Release: commit, push, Vercel production deployment and live check.
+- [ ] Verify auto-advance with sound on physical iPhone/iPad Safari, including after changing in-app volume.
+
+Definition of Done: `pnpm test`, `pnpm build`, `git diff --check`; Chromium desktop and emulated-touch checks with real media.

@@ -1,4 +1,6 @@
-# Current state — 2026-10-23
+# Current state — 2026-10-26
+
+Video playlist playback fixes (branch fix/video-autoplay, ADR-0008): auto-advance keeps an open playlist, skips files that fail during automatic playback with a bounded loop, restarts watched videos reached automatically, persists the repeat mode, and timeline arrow keys seek ten seconds. Verification: `pnpm test` (283 tests in 33 files, including music changes d2b4129), `pnpm build`, `git diff --check`; Chromium checks with real media covered auto-advance, repeat off/all/one with reload, unplayable-file skipping, mouse/keyboard/touch seeking, frame preview, and Music/Audio Books/Reader/Video smoke and audio handoff. Not yet released.
 
 Released to production on 2026-10-23 at https://local-beat-pwa.vercel.app (code commit 2f3af23):
 - Music / Audio Books / Reader / Video navigation, with Music selected at startup and independent audio session restoration.

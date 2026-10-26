@@ -58,7 +58,9 @@ On phones (including landscape), the video keeps its own unobstructed area. A co
 
 Desktop controls also include previous/next and ±10-second buttons. Hold the timeline for one second to see a frame preview; release to seek. Completed videos are marked in the playlist. Inline phone controls stay visible. In fullscreen and desktop playback, controls disappear after 2.5 seconds; move the mouse, tap the picture or use the keyboard to reveal them. The first reveal tap does not pause playback. Fullscreen keeps the controls and playlist available; on phones they remain below the picture. A full-window fallback is used when container fullscreen is unavailable, including iPhone Safari, so the app playlist stays accessible. On iOS, volume uses Web Audio when supported; a recovery message advises device buttons if unavailable.
 
-Keyboard when the video stage has focus: Space/K play or pause, Left/Right seek ten seconds, F fullscreen, M mute, Escape exits fullscreen. Music reorder handles also support Up/Down; Escape or pointer cancellation cancels a drag.
+When a video ends, the next one starts automatically and an open playlist stays open. Repeat all returns to the first video after the last one; Repeat one replays the current video. The repeat mode is remembered. During automatic playback, a file the browser cannot play is skipped with a short notice; a file chosen from the playlist stays selected with a recovery message. A watched video reached automatically starts from the beginning; unfinished videos resume where they stopped.
+
+Keyboard when the video stage has focus: Space/K play or pause, Left/Right seek ten seconds, F fullscreen, M mute, Escape exits fullscreen. When the timeline has focus, arrow keys also seek ten seconds and Home/End jump to the start or end. Music reorder handles also support Up/Down; Escape or pointer cancellation cancels a drag.
 
 Tablet layouts adapt to portrait and landscape; the full audio player uses two columns in landscape. Browser codecs determine which video files play. H.264/AAC MP4 is a useful compatibility choice; unsupported files display a recovery message.
 

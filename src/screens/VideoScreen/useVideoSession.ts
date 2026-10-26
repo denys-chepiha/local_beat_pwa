@@ -9,11 +9,13 @@ import { db } from '@/services/db'
 import { browserStorage } from '@/utils/browserStorage/browserStorage'
 
 export type VideoEntry = { id: number; file: File }
+export type VideoRepeat = 'off' | 'all' | 'one'
 type Progress = { time: number; completed: boolean }
 interface VideoSession {
   entries: VideoEntry[]
   activeId: number | null
   progress: Record<number, Progress>
+  repeat: VideoRepeat
   loaded: boolean
   storageError: string | null
   saving: boolean
@@ -21,6 +23,7 @@ interface VideoSession {
   hydrate: () => Promise<void>
   setEntries: (next: SetStateAction<VideoEntry[]>) => Promise<void>
   setActiveId: (id: number | null) => void
+  setRepeat: (repeat: VideoRepeat) => void
   saveProgress: (id: number, time: number, completed?: boolean) => void
   flushProgress: () => void
 }
@@ -34,7 +37,7 @@ let progressTimer: ReturnType<typeof setTimeout> | null = null
 const pendingProgress = new Map<number, Progress>()
 
 export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
-  entries: [], activeId: null, progress: {}, loaded: false, storageError: null, saving: false,
+  entries: [], activeId: null, progress: {}, repeat: 'off', loaded: false, storageError: null, saving: false,
 
   hydrate: () => {
     if (get().loaded) return Promise.resolve()
@@ -117,6 +120,8 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     set({ activeId })
   },
 
+  setRepeat: (repeat) => set({ repeat }),
+
   saveProgress: (id, time, completed = false) => {
     if (!Number.isFinite(time) || !get().entries.some((entry) => entry.id === id)) return
     const previous = pendingProgress.get(id) ?? get().progress[id]
@@ -137,4 +142,4 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     pendingProgress.clear()
     set({ progress })
   },
-}), { name: 'local-beat-video-session', storage: createJSONStorage(() => browserStorage), partialize: (s) => ({ activeId: s.activeId, progress: s.progress }) }))
+}), { name: 'local-beat-video-session', storage: createJSONStorage(() => browserStorage), partialize: (s) => ({ activeId: s.activeId, progress: s.progress, repeat: s.repeat }) }))

@@ -49,6 +49,11 @@ export default function VideoSeek({ file, time, duration, seek, onScrubbing }: {
     <ProgressSlider aria-label="Seek video" aria-valuetext={`${formatTime(position)} of ${formatTime(duration)}`} min={0} max={duration} step={0.1} value={Math.min(position, duration)} disabled={duration <= 0}
       onPointerDown={(e) => { held.current = true; e.currentTarget.setPointerCapture?.(e.pointerId); onScrubbing(true); timer.current = setTimeout(() => setPreview(true), 1000) }}
       onChange={(e) => { const next = Number(e.target.value); if (held.current) setTarget(next); else seek(next) }}
+      onKeyDown={(e) => {
+        // Match the player's ten-second arrow keys; the 0.1 s step only serves pointer precision.
+        const delta = ({ ArrowLeft: -10, ArrowDown: -10, ArrowRight: 10, ArrowUp: 10 } as Record<string, number>)[e.key]
+        if (delta) { e.preventDefault(); seek(position + delta) }
+      }}
       onPointerUp={(e) => { seek(Number(e.currentTarget.value)); cancel() }} onPointerCancel={cancel} onLostPointerCapture={cancel} onBlur={cancel} />
     </div><span>{formatTime(duration)}</span></div>
 }

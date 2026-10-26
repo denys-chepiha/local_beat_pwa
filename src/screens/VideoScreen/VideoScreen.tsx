@@ -13,14 +13,14 @@ import VideoSeek from './VideoSeek'
 import './VideoScreen.css'
 
 export default function VideoScreen() {
-  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, flushProgress, storageError, loaded, hydrate, saving, retrySave } = useVideoSession()
+  const { entries, setEntries, activeId, setActiveId, progress, saveProgress, flushProgress, storageError, loaded, hydrate, saving, retrySave, repeat, setRepeat } = useVideoSession()
   const [error, setError] = useState<string | null>(null)
+  const [skipped, setSkipped] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [rate, setRate] = useState(1)
   const [muted, setMuted] = useState(false)
-  const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off')
   const [volume, setVolume] = useState(1)
   const [expanded, setExpanded] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
@@ -39,6 +39,8 @@ export default function VideoScreen() {
   const inputRef = useRef<HTMLInputElement>(null)
   const nextId = useRef(Math.max(0, ...entries.map((entry) => entry.id)))
   const autoplay = useRef(false)
+  // Automatic playlist moves since playback last started; bounds skipping so unplayable files cannot loop forever.
+  const autoAdvances = useRef(0)
   const lastTap = useRef<{ at: number; side: -1 | 1 } | null>(null)
   const pauseAudio = usePlayerStore((s) => s.pause)
   const goHome = useUiStore((s) => s.goHome)
@@ -93,6 +95,11 @@ export default function VideoScreen() {
     document.addEventListener('keydown', escape)
     return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape) }
   }, [expanded])
+  useEffect(() => {
+    if (!skipped) return
+    const timer = setTimeout(() => setSkipped(null), 6000)
+    return () => clearTimeout(timer)
+  }, [skipped])
   useEffect(() => {
     lastTap.current = null
     const video = videoRef.current
@@ -176,9 +183,21 @@ export default function VideoScreen() {
   const toggleQueue = () => { setQueueOpen(!queueOpen); setSettingsOpen(false); wake() }
   const select = (id: number, shouldPlay = true) => {
     closeQueue()
+    autoAdvances.current = 0
+    setSkipped(null)
     if (id === activeId) { if (shouldPlay) play(); return }
     autoplay.current = shouldPlay
     setActiveId(id)
+  }
+  // Unlike select, keeps the playlist the viewer may be browsing open.
+  const advance = () => {
+    const following = entries[activeIndex + 1] ?? (repeat === 'all' ? entries[0] : undefined)
+    if (!following || autoAdvances.current >= entries.length) return false
+    autoAdvances.current += 1
+    if (following.id === activeId) { seek(0); play(); return true }
+    autoplay.current = true
+    setActiveId(following.id)
+    return true
   }
   const navigate = (delta: number) => {
     const next = entries[activeIndex + delta]
@@ -199,6 +218,7 @@ export default function VideoScreen() {
     const remaining = entries.filter((entry) => entry.id !== id)
     if (id === activeId) {
       autoplay.current = playing
+      autoAdvances.current = 0
       setActiveId(remaining[Math.min(activeIndex, remaining.length - 1)]?.id ?? null)
       if (!remaining.length) { setQueueOpen(false); setSettingsOpen(false); setExpanded(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}) }
     }
@@ -258,21 +278,22 @@ export default function VideoScreen() {
                   const video = videoRef.current!
                   setDuration(Number.isFinite(video.duration) ? video.duration : 0)
                   const saved = useVideoSession.getState().progress[activeId!]
-                  if (saved && Number.isFinite(video.duration)) { video.currentTime = saved.time >= video.duration ? 0 : Math.min(saved.time, video.duration); setTime(video.currentTime) }
+                  // An automatic move into a watched video starts it over instead of resuming a rewatched scene.
+                  const restart = saved && (saved.time >= video.duration || (saved.completed && autoAdvances.current > 0))
+                  if (saved && Number.isFinite(video.duration)) { video.currentTime = restart ? 0 : Math.min(saved.time, video.duration); setTime(video.currentTime) }
                   video.playbackRate = rate
                   if (supportsVolume) video.volume = volume
                   if (autoplay.current) { autoplay.current = false; play() }
                 }}
                 onDurationChange={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
                 onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); if (activeId !== null && e.currentTarget.readyState >= 1) saveProgress(activeId, e.currentTarget.currentTime) }}
-                onPlay={() => { handoff(); resumeGraph(); setPlaying(true); setError(null) }} onPause={(event) => { silenceGraph(); setPlaying(false); if (loadedEntryId.current !== null && event.currentTarget.readyState >= 1) saveProgress(loadedEntryId.current, event.currentTarget.currentTime); flushProgress() }}
+                onPlay={() => { handoff(); resumeGraph(); setPlaying(true); setError(null) }} onPlaying={() => { autoAdvances.current = 0 }} onPause={(event) => { silenceGraph(); setPlaying(false); if (loadedEntryId.current !== null && event.currentTarget.readyState >= 1) saveProgress(loadedEntryId.current, event.currentTarget.currentTime); flushProgress() }}
                 onEnded={() => {
                   silenceGraph()
                   setPlaying(false)
                   if (activeId !== null) saveProgress(activeId, duration, true)
                   if (repeat === 'one') { seek(0); play() }
-                  else if (activeIndex < entries.length - 1) navigate(1)
-                  else if (repeat === 'all' && entries.length) { if (entries.length === 1) { seek(0); play() } else select(entries[0].id) }
+                  else advance()
                 }}
                 onClick={(event) => {
                   const bounds = event.currentTarget.getBoundingClientRect()
@@ -285,7 +306,12 @@ export default function VideoScreen() {
                     seek(event.currentTarget.currentTime + side * 10)
                   } else lastTap.current = { at: now, side }
                 }}
-                onError={() => { silenceGraph(); setPlaying(false); setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.') }} />
+                onError={() => {
+                  silenceGraph(); setPlaying(false)
+                  // Keep an automatic run going past files this browser cannot decode; a file the viewer chose stays selected.
+                  if (autoAdvances.current > 0 && advance()) { setSkipped(file.name); return }
+                  setError('This video could not be played. Its format may be unsupported, or the drive may be disconnected. Try an MP4 with H.264 video and AAC audio.')
+                }} />
               {!playing && <button className="video-center-play" aria-label="Play video from center" onClick={() => { lastTap.current = null; wake(); play() }}><PlayIcon width={40} height={40} /></button>}
             </div>
             <div className={`video-overlay${controlsVisible ? '' : ' video-overlay--hidden'}`}
@@ -325,6 +351,7 @@ export default function VideoScreen() {
           <ol>{entries.map((entry, i) => <li key={entry.id} className={`${entry.id === activeId ? 'is-active' : ''}${progress[entry.id]?.completed ? ' is-watched' : ''}`}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}{progress[entry.id]?.completed && <small className="video-watched-label">✓ Watched</small>}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
         </aside>}
         {error && <p className="video-error" role="alert">{error}</p>}
+        {!error && skipped && <p className="video-error" role="status">Skipped {skipped}: this browser could not play it.</p>}
       </div>
       {file && <div className="video-details"><div><h2>{file.name}</h2><p>{activeIndex + 1} of {entries.length} · {(file.size / 1024 / 1024).toFixed(1)} MB</p></div></div>}
       {storageError && <div className="video-storage-error" role="alert"><p>{storageError}</p><button className="btn" disabled={saving} onClick={() => void retrySave()}>{saving ? 'Saving…' : 'Retry saving'}</button></div>}

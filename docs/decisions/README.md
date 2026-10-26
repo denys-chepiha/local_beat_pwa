@@ -10,3 +10,5 @@
 - ADR-0006-offline-reader-bridge.md — Accepted: exact-hash inline bridge for offline reading, with the opaque-origin sandbox retained.
 
 - ADR-0007-reader-touch-controls.md — Accepted: immersive fullscreen, icon actions, pinch/pan, bounded adjacent-page rendering and inline playlist naming.
+
+- ADR-0008-video-auto-advance.md — Accepted: automatic video moves keep the playlist open, skip unplayable files with a loop bound, restart watched videos, persist repeat and use ten-second timeline keys.

@@ -28,3 +28,15 @@ it('keeps preview staging separate from committed playback and cancels interrupt
   fireEvent.change(slider, { target: { value: 35 } })
   expect(seek).toHaveBeenCalledWith(35)
 })
+
+it('moves ten seconds per arrow key instead of the fine pointer step', () => {
+  const seek = vi.fn()
+  render(<VideoSeek file={new File(['video'], 'movie.mp4')} time={20} duration={100} seek={seek} onScrubbing={vi.fn()} />)
+  const slider = screen.getByRole('slider', { name: 'Seek video' })
+  fireEvent.keyDown(slider, { key: 'ArrowRight' })
+  expect(seek).toHaveBeenLastCalledWith(30)
+  fireEvent.keyDown(slider, { key: 'ArrowDown' })
+  expect(seek).toHaveBeenLastCalledWith(10)
+  fireEvent.keyDown(slider, { key: 'Home' })
+  expect(seek).toHaveBeenCalledTimes(2)
+})

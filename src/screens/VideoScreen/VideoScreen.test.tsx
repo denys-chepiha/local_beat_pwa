@@ -9,7 +9,7 @@ import { usePlayerStore } from '@/store/usePlayerStore'
 
 beforeEach(async () => {
   await useVideoSession.getState().setEntries([])
-  useVideoSession.setState({ entries: [], activeId: null, progress: {}, loaded: true, storageError: null })
+  useVideoSession.setState({ entries: [], activeId: null, progress: {}, repeat: 'off', loaded: true, storageError: null })
   usePlayerStore.setState({ pause: vi.fn() })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => `blob:${(blob as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL')
@@ -22,6 +22,9 @@ const metadata = (video: HTMLVideoElement) => {
   Object.defineProperty(video, 'duration', { configurable: true, value: 100 })
   fireEvent.loadedMetadata(video)
 }
+// Browsers fire playing once frames flow, and pause just before ended.
+const start = (video: HTMLVideoElement) => { metadata(video); fireEvent.playing(video) }
+const finish = (video: HTMLVideoElement) => { video.pause(); fireEvent.ended(video) }
 
 describe('local video playlist', () => {
   it('pauses audio, loads only the active local file, advances and releases resources', () => {
@@ -317,4 +320,109 @@ it('uses full-window fallback on Safari so the playlist remains available', () =
   expect(container.querySelector('.video-stage')).toHaveClass('video-stage--expanded')
   fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
   expect(screen.getByRole('complementary', { name: 'Video playlist' })).toBeVisible()
+})
+
+describe('playlist auto-advance', () => {
+  it('starts each following video, stops after the last one and keeps an open playlist', () => {
+    const { container } = render(<VideoScreen />)
+    choose('one.mp4', 'two.mp4', 'three.mp4')
+    const video = container.querySelector('video')!
+    start(video)
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+    finish(video)
+    expect(video.src).toBe('blob:two.mp4')
+    start(video)
+    expect(video.paused).toBe(false)
+    expect(screen.getByRole('complementary', { name: 'Video playlist' })).toBeVisible()
+    finish(video)
+    start(video)
+    expect(video.src).toBe('blob:three.mp4')
+    finish(video)
+    expect(video.src).toBe('blob:three.mp4')
+    expect(video.paused).toBe(true)
+    expect(screen.getByText('3 of 3 · 0.0 MB')).toBeInTheDocument()
+  })
+
+  it('wraps with repeat all, restarts with repeat one and remembers the mode', () => {
+    const first = render(<VideoScreen />)
+    choose('a.mp4', 'b.mp4')
+    const video = first.container.querySelector('video')!
+    start(video)
+    fireEvent.click(screen.getByRole('button', { name: 'Repeat video: off' }))
+    finish(video)
+    start(video)
+    finish(video)
+    expect(video.src).toBe('blob:a.mp4')
+    start(video)
+    expect(video.paused).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Repeat video: all' }))
+    video.currentTime = 100
+    finish(video)
+    expect(video.src).toBe('blob:a.mp4')
+    expect(video.currentTime).toBe(0)
+    expect(video.paused).toBe(false)
+    first.unmount()
+    expect(JSON.parse(localStorage.getItem('local-beat-video-session')!).state.repeat).toBe('one')
+    render(<VideoScreen />)
+    expect(screen.getByRole('button', { name: 'Repeat video: one' })).toBeInTheDocument()
+  })
+
+  it('skips files that fail during an automatic run but keeps a chosen file selected', () => {
+    vi.useFakeTimers()
+    const { container } = render(<VideoScreen />)
+    choose('ok.mp4', 'broken.mkv', 'last.mp4')
+    const video = container.querySelector('video')!
+    start(video)
+    finish(video)
+    expect(video.src).toBe('blob:broken.mkv')
+    fireEvent.error(video)
+    expect(video.src).toBe('blob:last.mp4')
+    expect(screen.getByRole('status')).toHaveTextContent('Skipped broken.mkv')
+    expect(screen.queryByRole('alert')).toBeNull()
+    start(video)
+    expect(video.paused).toBe(false)
+    act(() => vi.advanceTimersByTime(6000))
+    expect(screen.queryByText(/Skipped/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+    fireEvent.click(screen.getByRole('button', { name: '2broken.mkv' }))
+    fireEvent.error(video)
+    expect(video.src).toBe('blob:broken.mkv')
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be played')
+  })
+
+  it('stops an automatic run once every file has failed in turn', () => {
+    const { container } = render(<VideoScreen />)
+    choose('good.mp4', 'bad1.mp4', 'bad2.mp4')
+    const video = container.querySelector('video')!
+    start(video)
+    useVideoSession.getState().setRepeat('all')
+    finish(video)
+    fireEvent.error(video)
+    fireEvent.error(video)
+    expect(video.src).toBe('blob:good.mp4')
+    fireEvent.error(video)
+    expect(video.src).toBe('blob:good.mp4')
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be played')
+  })
+
+  it('starts watched videos over on auto-advance and resumes unfinished ones', () => {
+    const { container } = render(<VideoScreen />)
+    choose('first.mp4', 'second.mp4', 'third.mp4')
+    const [first, second, third] = useVideoSession.getState().entries.map((entry) => entry.id)
+    useVideoSession.setState({ progress: {
+      [first]: { time: 30, completed: true }, [second]: { time: 40, completed: true }, [third]: { time: 25, completed: false },
+    } })
+    const video = container.querySelector('video')!
+    start(video)
+    expect(video.currentTime).toBe(30)
+    finish(video)
+    start(video)
+    expect(video.src).toBe('blob:second.mp4')
+    expect(video.currentTime).toBe(0)
+    finish(video)
+    start(video)
+    expect(video.src).toBe('blob:third.mp4')
+    expect(video.currentTime).toBe(25)
+  })
 })
