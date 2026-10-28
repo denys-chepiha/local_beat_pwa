@@ -73,7 +73,7 @@ Dependencies: video session store and Web Animations API. Risks: touch-drag arbi
 - [x] Add drag handles with shifting rows, edge auto-scroll, FLIP drop/sort animation, arrow keys and reduced motion.
 - [x] Add the compact natural name sort to the playlist heading without interrupting playback.
 - [x] Verify tests/build and Chromium mouse, emulated touch, keyboard, sort and reload checks.
-- [ ] Release: commit, push, Vercel production deployment and live check.
+- [x] Release: commit, push, Vercel production deployment and live check (code a0d137b, 2026-10-28).
 - [ ] Verify touch dragging on physical iPhone/iPad Safari.
 
 Definition of Done: `pnpm test`, `pnpm build`, `git diff --check`; Chromium desktop and emulated-touch checks with real media.
