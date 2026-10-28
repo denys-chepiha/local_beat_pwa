@@ -110,6 +110,20 @@ describe('persistent video session', () => {
     expect(read).toHaveBeenCalledTimes(1)
     expect(useVideoSession.getState().loaded).toBe(true)
   })
+
+  it('restores the saved playlist order after reload and keeps unordered files last', async () => {
+    const { db, useVideoSession } = await freshSession()
+    await useVideoSession.getState().setEntries([entry(1), entry(2), entry(3)])
+    await useVideoSession.getState().setEntries((entries) => [entries[2], entries[0], entries[1]])
+    // A file stored before playlist order was saved has no position yet.
+    await db.videoFiles.put(entry(4))
+    vi.resetModules()
+    const { useVideoSession: reloaded } = await import('./useVideoSession')
+    await reloaded.getState().hydrate()
+    expect(reloaded.getState().entries.map((e) => e.id)).toEqual([3, 1, 2, 4])
+    expect(reloaded.getState().order).toEqual([3, 1, 2, 4])
+    await reloaded.getState().setEntries([])
+  })
 })
 
 

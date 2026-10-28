@@ -31,11 +31,12 @@
 .video-volume { width: 72px; }
 .video-speed select { background: #25252d; color: #fff; border: 0; padding: 10px 4px; border-radius: 6px; min-height: 44px; font: inherit; }
 .video-queue { position: absolute; right: 0; top: 0; bottom: 0; width: min(420px, 100%); background: var(--bg-elev); padding: 12px 16px; z-index: 2; overflow-y: auto; cursor: auto; }
-.video-queue-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.video-queue-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.video-queue-heading h2 { flex: 1; min-width: 0; }
 .video-queue h2 { font-size: 20px; }
 .video-queue ol { list-style: none; margin-top: 16px; }
-.video-queue li { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
-.video-queue li > button:first-child { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; padding: 16px 8px; text-align: left; }
+.video-queue li { display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--bg-elev); transition: background-color 150ms, box-shadow 150ms; }
+.video-queue-item { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; padding: 16px 8px 16px 4px; text-align: left; }
 .video-queue li span:last-child { overflow-wrap: anywhere; }
 .video-queue .is-active { background: var(--bg-elev-2); color: #c2b4ff; }
 .video-error { position: absolute; top: 64px; left: 16px; right: 16px; padding: 12px; background: #34232b; color: #ffb4c2; line-height: 1.5; font-size: 14px; }
@@ -81,7 +82,22 @@
 .video-playlist-toggle[aria-expanded='true'], .video-settings-toggle[aria-expanded='true'] { background: var(--bg-elev-2); color: #c2b4ff; }
 .video-control { flex-shrink: 0; touch-action: manipulation; }
 .video-control svg { flex-shrink: 0; }
-.video-queue li > button:first-child span:last-child { min-width: 0; }
+.video-queue-item span:last-child { min-width: 0; }
+
+/* Small enough to stay out of the way; the invisible margin keeps a 44px touch target. */
+.video-queue-sort { position: relative; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--surface-hover); color: var(--text-dim); font-size: 12px; font-weight: 600; white-space: nowrap; touch-action: manipulation; transition: background-color 150ms, color 150ms, transform 120ms; }
+.video-queue-sort::before { content: ''; position: absolute; inset: -8px -2px; }
+.video-queue-sort:hover:not(:disabled) { background: rgba(255,255,255,.15); color: var(--text); }
+.video-queue-sort:active:not(:disabled) { transform: scale(.96); }
+.video-queue-sort:disabled { opacity: .35; cursor: default; }
+
+.video-queue-handle { display: grid; place-items: center; align-self: stretch; width: 32px; min-height: 44px; flex-shrink: 0; color: var(--text-faint); cursor: grab; touch-action: none; }
+.video-queue-handle:hover { color: var(--text-dim); }
+.video-queue .is-reordering { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.video-queue .is-reordering > li { transition: transform 200ms cubic-bezier(.16,1,.3,1), background-color 150ms, box-shadow 150ms; }
+.video-queue .is-reordering > li.is-dragging { position: relative; z-index: 1; transition: background-color 150ms, box-shadow 150ms; background: var(--bg-elev-2); border-radius: var(--radius-sm); box-shadow: 0 10px 28px rgba(0,0,0,.55); }
+.video-queue .is-dragging .video-queue-handle { color: var(--text); cursor: grabbing; }
+@media (pointer: coarse) { .video-queue-handle { width: 40px; } }
 
 /* Phone portrait and short landscape windows share one compact control row. */
 @media (max-width: 767px), (max-height: 500px) {
@@ -109,7 +125,7 @@
   .video-queue-heading { margin-bottom: 4px; }
   .video-queue h2 { font-size: 16px; }
   .video-queue ol { margin-top: 8px; }
-  .video-queue li > button:first-child { min-height: 48px; padding: 12px 4px; gap: 8px; }
+  .video-queue-item { min-height: 48px; padding: 12px 4px 12px 0; gap: 8px; }
   .video-details { margin-top: 16px; }
   .video-details h2 { font-size: 16px; }
   .video-center-play { width: 56px; height: 56px; }

@@ -12,3 +12,4 @@
 - ADR-0007-reader-touch-controls.md — Accepted: immersive fullscreen, icon actions, pinch/pan, bounded adjacent-page rendering and inline playlist naming.
 
 - ADR-0008-video-auto-advance.md — Accepted: automatic video moves keep the playlist open, skip unplayable files with a loop bound, restart watched videos, persist repeat and use ten-second timeline keys.
+- ADR-0009-video-playlist-order.md — Accepted: persisted video playlist order, animated drag and keyboard reordering, and a one-time natural A–Z/Z–A name sort.

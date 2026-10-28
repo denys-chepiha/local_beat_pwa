@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 // Components
 import ProgressSlider from '@/components/ProgressSlider/ProgressSlider'
 import { VideoIcon, PlusIcon, PlayIcon, PauseIcon, PrevIcon, NextIcon, Rewind10Icon, Forward10Icon, PlaylistIcon, SettingsIcon, XIcon } from '@/components/Icons'
+import VideoPlaylist from './VideoPlaylist'
 // Services
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useUiStore } from '@/store/useUiStore'
@@ -346,10 +347,8 @@ export default function VideoScreen() {
         ) : (
           <div className="video-empty"><VideoIcon width={56} height={56} /><h2>Your videos, right here</h2><p>Choose videos from this device or a connected drive to build a playlist.</p><button className="btn" onClick={() => inputRef.current?.click()}>Choose videos</button></div>
         )}
-        {queueOpen && file && <aside id="video-playlist" className="video-queue" aria-label="Video playlist"><div className="video-queue-heading"><h2>Playlist</h2><button className="video-control" onClick={closeQueue} aria-label="Close playlist"><XIcon /></button></div>
-          <button className="btn" onClick={() => inputRef.current?.click()}><PlusIcon /> Add videos</button>
-          <ol>{entries.map((entry, i) => <li key={entry.id} className={`${entry.id === activeId ? 'is-active' : ''}${progress[entry.id]?.completed ? ' is-watched' : ''}`}><button onClick={() => select(entry.id)} aria-current={entry.id === activeId ? 'true' : undefined}><span>{i + 1}</span><span>{entry.file.name}{progress[entry.id]?.completed && <small className="video-watched-label">✓ Watched</small>}</span></button><button className="video-control" onClick={() => remove(entry.id)} aria-label={`Remove ${entry.file.name}`}><XIcon width={18} height={18} /></button></li>)}</ol>
-        </aside>}
+        {queueOpen && file && <VideoPlaylist entries={entries} activeId={activeId} progress={progress} onSelect={(id) => select(id)} onRemove={remove}
+          onReorder={(next) => void setEntries(next)} onAdd={() => inputRef.current?.click()} onClose={closeQueue} />}
         {error && <p className="video-error" role="alert">{error}</p>}
         {!error && skipped && <p className="video-error" role="status">Skipped {skipped}: this browser could not play it.</p>}
       </div>

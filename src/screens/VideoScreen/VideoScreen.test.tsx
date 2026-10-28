@@ -322,6 +322,27 @@ it('uses full-window fallback on Safari so the playlist remains available', () =
   expect(screen.getByRole('complementary', { name: 'Video playlist' })).toBeVisible()
 })
 
+it('sorts and reorders the open playlist without interrupting the current video', () => {
+  const { container } = render(<VideoScreen />)
+  choose('b.mp4', 'a.mp4', 'c.mp4')
+  const video = container.querySelector('video')!
+  start(video)
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Show playlist' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Sort by name, A–Z' }))
+  expect(useVideoSession.getState().entries.map((entry) => entry.file.name)).toEqual(['a.mp4', 'b.mp4', 'c.mp4'])
+  expect(useVideoSession.getState().order).toEqual(useVideoSession.getState().entries.map((entry) => entry.id))
+  expect(video.src).toBe('blob:b.mp4')
+  expect(video.paused).toBe(false)
+  expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+  expect(screen.getByText('2 of 3 · 0.0 MB')).toBeInTheDocument()
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder a.mp4' }), { key: 'ArrowDown' })
+  expect(screen.getByText('1 of 3 · 0.0 MB')).toBeInTheDocument()
+  // Auto-advance follows the new order: b, a, c.
+  finish(video)
+  expect(video.src).toBe('blob:a.mp4')
+})
+
 describe('playlist auto-advance', () => {
   it('starts each following video, stops after the last one and keeps an open playlist', () => {
     const { container } = render(<VideoScreen />)

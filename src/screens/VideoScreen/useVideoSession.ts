@@ -10,11 +10,13 @@ import { browserStorage } from '@/utils/browserStorage/browserStorage'
 
 export type VideoEntry = { id: number; file: File }
 export type VideoRepeat = 'off' | 'all' | 'one'
-type Progress = { time: number; completed: boolean }
+export type VideoProgress = { time: number; completed: boolean }
 interface VideoSession {
   entries: VideoEntry[]
+  // Playlist order by entry id; IndexedDB returns files by id, so the order is stored with the preferences.
+  order: number[]
   activeId: number | null
-  progress: Record<number, Progress>
+  progress: Record<number, VideoProgress>
   repeat: VideoRepeat
   loaded: boolean
   storageError: string | null
@@ -34,10 +36,10 @@ let hydration: Promise<void> | null = null
 let savedEntries: VideoEntry[] = []
 let mutationVersion = 0
 let progressTimer: ReturnType<typeof setTimeout> | null = null
-const pendingProgress = new Map<number, Progress>()
+const pendingProgress = new Map<number, VideoProgress>()
 
 export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
-  entries: [], activeId: null, progress: {}, repeat: 'off', loaded: false, storageError: null, saving: false,
+  entries: [], order: [], activeId: null, progress: {}, repeat: 'off', loaded: false, storageError: null, saving: false,
 
   hydrate: () => {
     if (get().loaded) return Promise.resolve()
@@ -45,11 +47,14 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     hydration = (async () => {
       try {
         await writes
-        const entries = await db.videoFiles.toArray()
+        const rank = new Map(get().order.map((id, index) => [id, index]))
+        // Files without a saved position (older sessions) keep their stable id order after the ordered ones.
+        const entries = (await db.videoFiles.toArray())
+          .sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER))
         savedEntries = entries
         const ids = new Set(entries.map((entry) => entry.id))
         const progress = Object.fromEntries(Object.entries(get().progress).filter(([id]) => ids.has(Number(id))))
-        set({ entries, progress, loaded: true, storageError: null,
+        set({ entries, order: entries.map((entry) => entry.id), progress, loaded: true, storageError: null,
           activeId: ids.has(get().activeId!) ? get().activeId : entries[0]?.id ?? null })
       } catch {
         set({ storageError: 'Could not restore videos. Check available device storage and try again.' })
@@ -66,7 +71,7 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     get().flushProgress()
     const entries = typeof next === 'function' ? next(get().entries) : next
     const version = ++mutationVersion
-    set({ entries })
+    set({ entries, order: entries.map((entry) => entry.id) })
     // Diff the committed database, not the optimistic UI: a later retry must
     // include files from any earlier failed addition.
     writes = writes.then(async () => {
@@ -107,7 +112,7 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
           // whose deletion failed, so the visible playlist reflects that failure.
           const ids = new Set(entries.map((entry) => entry.id))
           const restored = [...entries, ...savedEntries.filter((entry) => !ids.has(entry.id))]
-          set({ entries: restored, activeId: get().activeId ?? restored[0]?.id ?? null,
+          set({ entries: restored, order: restored.map((entry) => entry.id), activeId: get().activeId ?? restored[0]?.id ?? null,
             storageError: 'Video changes could not be saved. Check device storage and retry saving.' })
         }
       } finally { set({ saving: false }) }
@@ -142,4 +147,4 @@ export const useVideoSession = create<VideoSession>()(persist((set, get) => ({
     pendingProgress.clear()
     set({ progress })
   },
-}), { name: 'local-beat-video-session', storage: createJSONStorage(() => browserStorage), partialize: (s) => ({ activeId: s.activeId, progress: s.progress, repeat: s.repeat }) }))
+}), { name: 'local-beat-video-session', storage: createJSONStorage(() => browserStorage), partialize: (s) => ({ order: s.order, activeId: s.activeId, progress: s.progress, repeat: s.repeat }) }))

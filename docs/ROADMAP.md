@@ -64,3 +64,16 @@ Dependencies: existing video session store and browser media APIs. Risks: Safari
 - [ ] Verify auto-advance with sound on physical iPhone/iPad Safari, including after changing in-app volume.
 
 Definition of Done: `pnpm test`, `pnpm build`, `git diff --check`; Chromium desktop and emulated-touch checks with real media.
+
+## Video playlist order
+Scope: animated drag and keyboard reordering, a compact one-time name sort (A–Z/Z–A) in the playlist heading and a persisted order (ADR-0009). Non-scope: persistent sort modes, sort undo, other sort keys and music playlist changes.
+Dependencies: video session store and Web Animations API. Risks: touch-drag arbitration with scrolling on iPhone/iPad Safari and cleared preference storage.
+
+- [x] Persist the playlist order and restore it on hydration, keeping files without a position last.
+- [x] Add drag handles with shifting rows, edge auto-scroll, FLIP drop/sort animation, arrow keys and reduced motion.
+- [x] Add the compact natural name sort to the playlist heading without interrupting playback.
+- [x] Verify tests/build and Chromium mouse, emulated touch, keyboard, sort and reload checks.
+- [ ] Release: commit, push, Vercel production deployment and live check.
+- [ ] Verify touch dragging on physical iPhone/iPad Safari.
+
+Definition of Done: `pnpm test`, `pnpm build`, `git diff --check`; Chromium desktop and emulated-touch checks with real media.
